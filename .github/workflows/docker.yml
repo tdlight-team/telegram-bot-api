@@ -44,7 +44,7 @@ jobs:
 
       - name: Login to registry
         run: |
-          echo "${{ secrets.GITHUB_ACCESS_TOKEN }}" | docker login docker.pkg.github.com -u ${{ github.actor }} --password-stdin
+          echo "${{ secrets.GH_ACCESS_TOKEN }}" | docker login docker.pkg.github.com -u ${{ github.actor }} --password-stdin
 
 
       - name: Push images
