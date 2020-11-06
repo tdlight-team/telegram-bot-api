@@ -36,7 +36,6 @@ jobs:
 
       - name: Build image
         run: |
-          IMAGE_ID=docker.pkg.github.com/${{ github.repository }}/${{ github.repository }}
           docker build \
             --tag tdlight-team/tdlight-telegram-bot-api:latest \
             --tag tdlight-team/tdlight-telegram-bot-api:$version \
