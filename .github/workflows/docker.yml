@@ -12,7 +12,8 @@ jobs:
     name: Build Image
     runs-on: ubuntu-latest
     env:
-        IMAGE_TAG: docker.pkg.github.com/${{ github.repository }}/tdlightbotapi
+        REGISTRY: docker.pkg.github.com
+        IMAGE_TAG: $REGISTRY/${{ github.repository }}/tdlightbotapi
 
     steps:
       - name: Checkout current repo
@@ -20,32 +21,39 @@ jobs:
         with:
             submodules: "recursive"
 
-      - name: Get Version
+      - name: Get version
         run: |
-          # get telegram bot api version
-          telegram_bot_api_version=$(git rev-parse --short HEAD)
+          # Strip git ref prefix from version
+          VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+        
+          # Strip "v" prefix from tag name
+          [[ "${{ github.ref }}" == "refs/tags/"* ]] && VERSION=$(echo $VERSION | sed -e 's/^v//')
+        
+          # Use Docker `latest` tag convention
+          [ "$VERSION" == "master" ] && VERSION=latest
+ 
+          # Convert IMAGE_ID and VERSION to lowercase (repository name must be lowercase)
+          IMAGE_ID=$(echo "$IMAGE_ID" | awk '{print tolower($0)}')
+          VERSION=$(echo "$VERSION" | awk '{print tolower($0)}')
 
-          # get tdlib version
-          tdlib_version=$(cd td && git rev-parse --short HEAD)
-
-          # concat tdlib and telegram bot api version
-          version=$telegram_bot_api_version-$tdlib_version
-
-          # store variable for future use
-          echo "version=$version" >> $GITHUB_ENV
+          # Store variable for future use
+          echo "version=$VERSION" >> $GITHUB_ENV
+          echo "version: $VERSION"
 
       - name: Build image
         run: |
           docker build \
-            --tag $IMAGE_TAG:latest \
-            --tag $IMAGE_TAG:$version \
+            --tag $IMAGE_TAG:$VERSION \
             .
 
       - name: Login to registry
         run: |
-          echo "${{ secrets.GH_ACCESS_TOKEN }}" | docker login docker.pkg.github.com -u ${{ github.actor }} --password-stdin
-
+          echo "${{ secrets.GH_ACCESS_TOKEN }}" | docker login $REGISTRY -u ${{ github.actor }} --password-stdin
 
       - name: Push images
         run: |
-          docker push $IMAGE_TAG:$version
+          docker push $IMAGE_TAG:$VERSION
+
+      - name: Logout from registry
+        run: |
+          docker logout $REGISTRY
