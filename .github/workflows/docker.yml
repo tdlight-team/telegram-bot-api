@@ -12,7 +12,7 @@ jobs:
     name: Build Image
     runs-on: ubuntu-latest
     env:
-        IMAGE_id: docker.pkg.github.com/${{ github.repository }}/${{ github.repository }}
+        IMAGE_id: docker.pkg.github.com/${{ github.repository }}
 
     steps:
       - name: Checkout current repo
