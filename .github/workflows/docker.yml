@@ -41,7 +41,7 @@ jobs:
           VERSION=$(echo "$VERSION" | awk '{print tolower($0)}')
 
           # Store variable for future use
-          echo "HASH_VERSION=$HASH_VERSION" >> $GITHUB_VERSION
+          echo "HASH_VERSION=$HASH_VERSION" >> $GITHUB_ENV
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
           # Print debug info
