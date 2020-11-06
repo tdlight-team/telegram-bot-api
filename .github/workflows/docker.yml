@@ -12,7 +12,7 @@ jobs:
     name: Build Image
     runs-on: ubuntu-latest
     env:
-        IMAGE_id: docker.pkg.github.com/${{ github.repository }}/tdlightbotapi
+        IMAGE_TAG: docker.pkg.github.com/${{ github.repository }}/tdlightbotapi
 
     steps:
       - name: Checkout current repo
@@ -37,8 +37,8 @@ jobs:
       - name: Build image
         run: |
           docker build \
-            --tag tdlight-team/tdlight-telegram-bot-api:latest \
-            --tag tdlight-team/tdlight-telegram-bot-api:$version \
+            --tag $IMAGE_TAG:latest \
+            --tag $IMAGE_TAG:$version \
             .
 
       - name: Login to registry
@@ -48,4 +48,4 @@ jobs:
 
       - name: Push images
         run: |
-          docker push $IMAGE_ID:$version
+          docker push $IMAGE_TAG:$version
