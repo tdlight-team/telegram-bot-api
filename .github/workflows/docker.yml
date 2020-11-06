@@ -23,6 +23,9 @@ jobs:
 
       - name: Get version
         run: |
+          # Get latest commit short hash
+          HASH_VERSION=$(git rev-parse --short HEAD)
+
           # Strip git ref prefix from version
           VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
         
@@ -34,16 +37,22 @@ jobs:
  
           # Convert IMAGE_ID and VERSION to lowercase (repository name must be lowercase)
           IMAGE_ID=$(echo "$IMAGE_ID" | awk '{print tolower($0)}')
+          HASH_VERSION=$(echo "$HASH_VERSION" | awk '{print tolower($0)}')
           VERSION=$(echo "$VERSION" | awk '{print tolower($0)}')
 
           # Store variable for future use
+          echo "HASH_VERSION=$HASH_VERSION" >> $GITHUB_VERSION
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+          # Print debug info
+          echo "hash version: $HASH_VERSION"
           echo "version: $VERSION"
 
       - name: Build image
         run: |
           docker build \
-            --tag $IMAGE_TAG:$VERSION \
+            --tag $IMAGE_TAG:$HASH_VERSION \
+            --tag $IMAGE_TAG:$VERSION
             .
 
       - name: Login to registry
@@ -52,6 +61,7 @@ jobs:
 
       - name: Push images
         run: |
+          docker push $IMAGE_TAG:$HASH_VERSION
           docker push $IMAGE_TAG:$VERSION
 
       - name: Logout from registry
