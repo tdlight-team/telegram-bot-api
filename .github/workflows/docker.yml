@@ -37,7 +37,7 @@ jobs:
           VERSION=$(echo "$VERSION" | awk '{print tolower($0)}')
 
           # Store variable for future use
-          echo "version=$VERSION" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "version: $VERSION"
 
       - name: Build image
