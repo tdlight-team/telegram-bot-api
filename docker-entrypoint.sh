@@ -42,4 +42,3 @@ COMMAND="telegram-bot-api ${DEFAULT_ARGS}${CUSTOM_ARGS}"
 echo "$COMMAND"
 # shellcheck disable=SC2086
 exec $COMMAND
-

@@ -226,4 +226,3 @@ jobs:
           --amend ${{ env.IMAGE_TAG_DH }}:${{ env.VERSION }}-linuxarm64 \
           --amend ${{ env.IMAGE_TAG_DH }}:${{ env.VERSION }}-linuxppc64le
           docker manifest push ${{ env.IMAGE_TAG_DH }}:${{ env.VERSION }}
-
