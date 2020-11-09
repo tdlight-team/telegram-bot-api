@@ -41,7 +41,6 @@ jobs:
           IMAGE_TAG_DH=$(echo "$IMAGE_TAG_DH" | awk '{print tolower($0)}')
           HASH_VERSION=$(echo "$HASH_VERSION" | awk '{print tolower($0)}')
           VERSION=$(echo "$VERSION" | awk '{print tolower($0)}')
-          GITHUB_ACTOR=$(echo "${{ github.actor }}" | awk '{print tolower($0)}')
           ARCH=${{ matrix.arch }}
           SAFE_ARCH=${ARCH///}  # linux/amd64 -> linuxamd64
 
@@ -51,13 +50,11 @@ jobs:
           echo "HASH_VERSION=$HASH_VERSION" >> $GITHUB_ENV
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "SAFE_ARCH=$SAFE_ARCH" >> $GITHUB_ENV
-          echo "GITHUB_ACTOR=$GITHUB_ACTOR" >> $GITHUB_ENV
 
           # Print debug info
           echo "hash version: $HASH_VERSION"
           echo "version: $VERSION"
           echo "safe arch: $SAFE_ARCH"
-          echo "github actor: $GITHUB_ACTOR"
 
           # Save env to file
           cat $GITHUB_ENV > github.env
@@ -86,13 +83,13 @@ jobs:
         uses: docker/login-action@v1
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
+          username: ${{ secrets.GH_USERNAME }}
           password: ${{ secrets.GH_ACCESS_TOKEN }}
 
       - name: Login to Docker Hub registry
         uses: docker/login-action@v1
         with:
-          username: ${{ env.GITHUB_ACTOR }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
 
       - name: Build image
@@ -155,13 +152,13 @@ jobs:
         uses: docker/login-action@v1
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
+          username: ${{ secrets.GH_USERNAME }}
           password: ${{ secrets.GH_ACCESS_TOKEN }}
 
       - name: Login to Docker Hub registry
         uses: docker/login-action@v1
         with:
-          username: ${{ env.GITHUB_ACTOR }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
 
       - name: Create and push manifest
