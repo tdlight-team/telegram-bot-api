@@ -41,8 +41,6 @@ class Client : public WebhookActor::Callback {
   Client(td::ActorShared<> parent, const td::string &bot_token, bool is_test_dc, td::int64 tqueue_id,
          std::shared_ptr<const ClientParameters> parameters, td::ActorId<BotStatActor> stat_actor);
 
-  void start_up() override;
-
   void send(PromisedQueryPtr query) override;
 
   void close();
@@ -214,6 +212,12 @@ class Client : public WebhookActor::Callback {
   template <class OnSuccess>
   class TdOnCheckChatCallback;
   template <class OnSuccess>
+  class TdOnEnableInternetConnectionCallback;
+  template <class OnSuccess>
+  class TdOnOptimizeMemoryCallback;
+  template <class OnSuccess>
+  class TdOnDisableInternetConnectionCallback;
+  template <class OnSuccess>
   class TdOnCheckMessageCallback;
   template <class OnSuccess>
   class TdOnCheckRemoteFileIdCallback;
@@ -240,6 +244,14 @@ class Client : public WebhookActor::Callback {
 
   template <class OnSuccess>
   void check_chat(Slice chat_id_str, AccessRights access_rights, PromisedQueryPtr query, OnSuccess on_success);
+
+  template <class OnSuccess>
+  void disable_internet_connection(PromisedQueryPtr query, OnSuccess on_success);
+
+  template <class OnSuccess>
+  void optimize_memory(PromisedQueryPtr query, OnSuccess on_success);
+
+  void enable_internet_connection(PromisedQueryPtr query);
 
   template <class OnSuccess>
   void check_remote_file_id(td::string file_id, PromisedQueryPtr query, OnSuccess on_success);
@@ -386,11 +398,11 @@ class Client : public WebhookActor::Callback {
 
   static td::Result<td::MutableSlice> get_required_string_arg(const Query *query, Slice field_name);
 
-  static int64 get_message_id(const Query *query, Slice field_name = "message_id");
+  static int64 get_message_id(const Query *query, Slice field_name = Slice("message_id"));
 
-  static td::Result<Slice> get_inline_message_id(const Query *query, Slice field_name = "inline_message_id");
+  static td::Result<Slice> get_inline_message_id(const Query *query, Slice field_name = Slice("inline_message_id"));
 
-  static td::Result<int32> get_user_id(const Query *query, Slice field_name = "user_id");
+  static td::Result<int32> get_user_id(const Query *query, Slice field_name = Slice("user_id"));
 
   int64 extract_yet_unsent_message_query_id(int64 chat_id, int64 message_id, bool *is_reply_to_message_deleted);
 
@@ -453,6 +465,7 @@ class Client : public WebhookActor::Callback {
   Status process_get_chat_member_query(PromisedQueryPtr &query);
   Status process_get_chat_administrators_query(PromisedQueryPtr &query);
   Status process_get_chat_member_count_query(PromisedQueryPtr &query);
+  Status process_optimize_memory_query(PromisedQueryPtr &query);
   Status process_leave_chat_query(PromisedQueryPtr &query);
   Status process_promote_chat_member_query(PromisedQueryPtr &query);
   Status process_set_chat_administrator_custom_title_query(PromisedQueryPtr &query);
@@ -473,6 +486,13 @@ class Client : public WebhookActor::Callback {
   Status process_set_webhook_query(PromisedQueryPtr &query);
   Status process_get_webhook_info_query(PromisedQueryPtr &query);
   Status process_get_file_query(PromisedQueryPtr &query);
+
+  //custom methods
+  Status process_get_message_info_query(PromisedQueryPtr &query);
+  Status process_get_participants_query(PromisedQueryPtr &query);
+  Status process_delete_messages_query(PromisedQueryPtr &query);
+  Status process_toggle_group_invites_query(PromisedQueryPtr &query);
+
 
   void webhook_verified(td::string cached_ip_address) override;
   void webhook_success() override;
@@ -516,6 +536,8 @@ class Client : public WebhookActor::Callback {
   void do_get_updates(int32 offset, int32 limit, int32 timeout, PromisedQueryPtr query);
 
   void long_poll_wakeup(bool force_flag);
+
+  void start_up() override;
 
   void raw_event(const td::Event::Raw &event) override;
 
@@ -627,6 +649,9 @@ class Client : public WebhookActor::Callback {
     int32 via_bot_user_id = 0;
     object_ptr<td_api::MessageContent> content;
     object_ptr<td_api::ReplyMarkup> reply_markup;
+
+    int32 views = 0;
+    int32 forwards = 0;
 
     mutable bool is_reply_to_message_deleted = false;
     mutable bool is_content_changed = false;

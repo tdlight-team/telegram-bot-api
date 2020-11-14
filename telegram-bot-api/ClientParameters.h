@@ -55,6 +55,9 @@ struct SharedData {
 
 struct ClientParameters {
   bool local_mode_ = false;
+  bool allow_http_ = false;
+  bool use_relative_path_ = false;
+  bool no_file_limit_ = true;
 
   td::int32 api_id_ = 0;
   td::string api_hash_;
@@ -62,6 +65,7 @@ struct ClientParameters {
   td::int32 default_max_webhook_connections_ = 0;
   td::IPAddress webhook_proxy_ip_address_;
 
+  td::uint32 max_batch_operations = 10000;
   double start_timestamp_ = 0;
 
   td::ActorId<td::GetHostByNameActor> get_host_by_name_actor_id_;
