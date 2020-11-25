@@ -71,6 +71,15 @@ The maximum number of messages to be deleted in a single batch is determined by 
 - `end` Last message id to delete
 ##### Returns `true`
 
+#### Command `ping`
+Send an MTProto ping message to the telegram servers. 
+Useful to detect the delay of the bot api server.
+
+##### Parameters
+No parameters
+##### Returns `string`
+Ping delay in seconds represented as string.
+
 <!--TODO:
 #### Command `togglegroupinvites`
 (todo)
@@ -103,12 +112,29 @@ The `ChatMember` object now has two new fields:
 - `joined_date`: integer, unix timestamp, when has the user joined
 - `inviter`: `User`, the inviter
 
+#### Object `Chat`
+The `Chat` object now has two new fields:
+- `is_verified`: bool, optional, default false. Is the chat verified by Telegram, clients show a verified batch
+- `is_scam`: bool, optional, default false. Is the chat reported for scam, clients show a warning to the user
+
+#### Object `User`
+The `User` object now has two new fields:
+- `is_verified`: bool, optional, default false. Is the user verified by Telegram, clients show a verified batch
+- `is_scam`: bool, optional, default false. Is the user reported for scam, clients show a warning to the user
+
 In addition, the member list now shows the full bot list (previously only the bot that executed the query was shown)
+
+The bot will now receive Updates for all received media, even if a destruction timer is set.
 
 <a name="installation"></a>
 ## Installation
 
-The simplest way to build and install `Telegram Bot API server` is to use our [Telegram Bot API server build instructions generator](https://tdlib.github.io/telegram-bot-api/build.html).
+The simplest way to use it is with this docker command:
+```
+docker run -p 8081:8081 --env TELEGRAM_API_ID=API_ID --env TELEGRAM_API_HASH=API_HASH tdlight/tdlightbotapi 
+```
+
+The simplest way to build `Telegram Bot API server` is to use our [Telegram Bot API server build instructions generator](https://tdlib.github.io/telegram-bot-api/build.html).
 If you do that, you'll only need to choose the target operating system to receive the complete build instructions.
 
 In general, you need to install all `Telegram Bot API server` [dependencies](#dependencies) and compile the source code using CMake:
