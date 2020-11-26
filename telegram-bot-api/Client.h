@@ -38,7 +38,8 @@ namespace td_api = td::td_api;
 
 class Client : public WebhookActor::Callback {
  public:
-  Client(td::ActorShared<> parent, const td::string &bot_token, bool is_test_dc, td::int64 tqueue_id,
+  Client(td::ActorShared<> parent, const td::string &bot_token, bool is_test_dc, bool is_user,
+         const td::string &phone_number, const td::string &password, td::int64 tqueue_id,
          std::shared_ptr<const ClientParameters> parameters, td::ActorId<BotStatActor> stat_actor);
 
   void send(PromisedQueryPtr query) override;
@@ -823,12 +824,16 @@ class Client : public WebhookActor::Callback {
   bool logging_out_ = false;
   bool need_close_ = false;
   bool clear_tqueue_ = false;
+  bool waiting_for_code_ = false;
 
   td::ActorShared<> parent_;
   td::string bot_token_;
   td::string bot_token_with_dc_;
   td::string bot_token_id_;
   bool is_test_dc_;
+  bool is_user_;
+  td::string phone_number_;
+  td::string password_;
   int64 tqueue_id_;
   double start_timestamp_ = 0;
 

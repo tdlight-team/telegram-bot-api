@@ -28,7 +28,12 @@ void HttpConnection::handle(td::unique_ptr<td::HttpQuery> http_query,
     return send_http_error(404, "Not Found: absolute URI is specified in the Request-Line");
   }
 
-  if (!url_path_parser.try_skip("/bot")) {
+  bool is_user_;
+  if (url_path_parser.try_skip("/bot")) {
+    is_user_ = false;
+  } else if (url_path_parser.try_skip("/user")){
+    is_user_ = true;
+  }else{
     return send_http_error(404, "Not Found");
   }
 
@@ -52,7 +57,11 @@ void HttpConnection::handle(td::unique_ptr<td::HttpQuery> http_query,
   td::init_promise_future(&promise, &future);
   future.set_event(td::EventCreator::yield(actor_id()));
   auto promised_query = PromisedQueryPtr(query.release(), PromiseDeleter(std::move(promise)));
-  send_closure(client_manager_, &ClientManager::send, std::move(promised_query));
+  if (is_user_){
+    send_closure(client_manager_, &ClientManager::send_user, std::move(promised_query));
+  }else{
+    send_closure(client_manager_, &ClientManager::send, std::move(promised_query));
+  }
   result_ = std::move(future);
 }
 

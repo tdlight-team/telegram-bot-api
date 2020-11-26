@@ -116,8 +116,96 @@ void ClientManager::send(PromisedQueryPtr query) {
     auto *client_info = clients_.get(id);
     auto stat_actor = client_info->stat_.actor_id(&client_info->stat_);
     auto client_id = td::create_actor<Client>(
-        PSLICE() << "Client/" << token, actor_shared(this, id), query->token().str(), query->is_test_dc(),
+        PSLICE() << "Client/" << token, actor_shared(this, id), query->token().str(), query->is_test_dc(), false, "", "",
         get_tqueue_id(r_user_id.ok(), query->is_test_dc()), parameters_, std::move(stat_actor));
+
+    auto method = query->method();
+    if (method != "deletewebhook" && method != "setwebhook") {
+      auto bot_token_with_dc = PSTRING() << query->token() << (query->is_test_dc() ? ":T" : "");
+      auto webhook_info = parameters_->shared_data_->webhook_db_->get(bot_token_with_dc);
+      if (!webhook_info.empty()) {
+        send_closure(client_id, &Client::send,
+                     get_webhook_restore_query(bot_token_with_dc, webhook_info, parameters_->shared_data_));
+      }
+    }
+
+    clients_.get(id)->client_ = std::move(client_id);
+    std::tie(id_it, std::ignore) = token_to_id_.emplace(token, id);
+  }
+  auto *client_info = clients_.get(id_it->second);
+
+  if (!query->is_internal()) {
+    query->set_stat_actor(client_info->stat_.actor_id(&client_info->stat_));
+  }
+  send_closure(client_info->client_, &Client::send, std::move(query));  // will send 429 if the client is already closed
+}
+
+void ClientManager::send_user(PromisedQueryPtr query) {
+  if (close_flag_) {
+    // automatically send 429
+    return;
+  }
+
+  td::string token = query->token().str();
+  if (token.size() < 30u || token.size() > 100u || token.find('/') != td::string::npos) {
+    return fail_query(401, "Unauthorized: invalid token specified", std::move(query));
+  }
+
+  if (query->is_test_dc()) {
+    token += "/test";
+  }
+
+  auto id_it = token_to_id_.find(token);
+  if (id_it == token_to_id_.end()) {
+    std::string ip_address;
+    if (query->peer_address().is_valid() && !query->peer_address().is_reserved()) {  // external connection
+      ip_address = query->peer_address().get_ip_str().str();
+    } else {
+      // invalid peer address or connection from the local network
+      ip_address = query->get_header("x-real-ip").str();
+    }
+    if (!ip_address.empty()) {
+      td::IPAddress tmp;
+      tmp.init_host_port(ip_address, 0).ignore();
+      tmp.clear_ipv6_interface();
+      if (tmp.is_valid()) {
+        ip_address = tmp.get_ip_str().str();
+      }
+    }
+    LOG(DEBUG) << "Receive incoming query for new user " << token << " from " << query->peer_address();
+    if (!ip_address.empty()) {
+      LOG(DEBUG) << "Check Client creation flood control for IP address " << ip_address;
+      auto res = flood_controls_.emplace(std::move(ip_address), td::FloodControlFast());
+      auto &flood_control = res.first->second;
+      if (res.second) {
+        flood_control.add_limit(60, 20);        // 20 in a minute
+        flood_control.add_limit(60 * 60, 600);  // 600 in an hour
+      }
+      td::uint32 now = static_cast<td::uint32>(td::Time::now());
+      td::uint32 wakeup_at = flood_control.get_wakeup_at();
+      if (wakeup_at > now) {
+        LOG(INFO) << "Failed to create Client from IP address " << ip_address;
+        return query->set_retry_after_error(static_cast<int>(wakeup_at - now) + 1);
+      }
+      flood_control.add_event(static_cast<td::int32>(now));
+    }
+    td::string phone_number;
+    td::string password;
+    if (query->method() == "login"){
+      phone_number = query->arg("phone_number").str();
+      password = query->arg("password").str();
+      if (phone_number.empty()){
+        fail_query(404, "No phone number found.", std::move(query));
+        return;
+      }
+    }
+    auto tokenhash = std::hash<std::string>{}(token);
+    auto id = clients_.create(ClientInfo{BotStatActor(stat_.actor_id(&stat_)), token, td::ActorOwn<Client>()});
+    auto *client_info = clients_.get(id);
+    auto stat_actor = client_info->stat_.actor_id(&client_info->stat_);
+    auto client_id = td::create_actor<Client>(
+        PSLICE() << "Client/" << token, actor_shared(this, id), query->token().str(), query->is_test_dc(), true, phone_number, password,
+        get_tqueue_id(tokenhash, query->is_test_dc()), parameters_, std::move(stat_actor));
 
     auto method = query->method();
     if (method != "deletewebhook" && method != "setwebhook") {

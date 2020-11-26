@@ -15,6 +15,7 @@ Please note that only TDLight-specific issues are suitable for this repository.
 - [TDLight features](#tdlight-features)
     - [Added features](#added-features)
     - [Modified features](#modified-features)
+    - [User support](#user-support)
 - [Installation](#installation)
 - [Dependencies](#dependencies)
 - [Usage](#usage)
@@ -125,6 +126,27 @@ The `User` object now has two new fields:
 In addition, the member list now shows the full bot list (previously only the bot that executed the query was shown)
 
 The bot will now receive Updates for all received media, even if a destruction timer is set.
+
+<a name="user-support"></a>
+### User Support
+
+You can now log into the bot api with user accounts to create userbots running on your account.
+This functionality is currently in BETA.
+
+#### User Authorization Process
+1. Create a random string with a length of `30 <= token_length <= 100`. This will work as your token and should not be 
+   brute-forcible.
+
+2. Send a request to `<api_url>/user<your_random_token>/login?phone_number=<your_phone_number>&password=<your_password>`
+   The bot api will tell you to send the code then. The password parameter is optional.
+   
+3. Send the received code to `<api_url>/user<your_random_token>/authcode?code=12345`
+   Will send ok on success. You are now logged in and can use all methods like in the bot api, just replace the 
+   `/bot<token>/` in your urls with `/user<token>/`. If you do any mistakes during the authorization process,
+   just create a new token and try again.
+   
+You only need to authenticate once, the account will stay logged in. You can use the `log_out` method to log out
+or simply close the session in your account settings.
 
 <a name="installation"></a>
 ## Installation
