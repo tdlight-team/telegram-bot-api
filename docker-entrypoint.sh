@@ -46,6 +46,9 @@ fi
 if [ -n "$TELEGRAM_RELATIVE" ]; then
   CUSTOM_ARGS="${CUSTOM_ARGS} --relative"
 fi
+if [ -n "$TELEGRAM_USER_MODE" ]; then
+  CUSTON_ARGS="${CUSTOM_ARGS} --user-mode"
+fi
 if [ -n "$TELEGRAM_MAX_BATCH" ]; then
   CUSTOM_ARGS="${CUSTOM_ARGS} ---max-batch-operations=$TELEGRAM_MAX_BATCH"
 fi
