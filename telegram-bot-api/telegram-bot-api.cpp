@@ -21,6 +21,7 @@
 #include "td/net/HttpInboundConnection.h"
 
 #include "td/actor/actor.h"
+#include "td/actor/ConcurrentScheduler.h"
 #include "td/actor/PromiseFuture.h"
 
 #include "td/utils/buffer.h"
@@ -171,8 +172,8 @@ int main(int argc, char *argv[]) {
   options.add_option('h', "help", "display this help text and exit", [&] { need_print_usage = true; });
   options.add_option('\0', "local", "allow the Bot API server to serve local requests and disables the file limits",
                      [&] { parameters->local_mode_ = true; });
-  options.add_option('\0', "no-file-limit", "disable the file limits",
-		             [&] { parameters->no_file_limit_ = true; });
+  options.add_option('\0', "no-file-limit", "disable the file limits", [&] { parameters->no_file_limit_ = true; });
+  options.add_option('\0', "user-mode", "Experimental: allow user accounts to log into the bot api", [&] { parameters->user_mode_ = true; });
   options.add_option('\0', "insecure", "allow the Bot API to send request via insecure HTTP", [&] { parameters->allow_http_ = true; });
   options.add_option('\0', "relative", "use relative file path in local mode", [&] { parameters->use_relative_path_ = true; });
 

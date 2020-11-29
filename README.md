@@ -15,7 +15,7 @@ Please note that only TDLight-specific issues are suitable for this repository.
 - [TDLight features](#tdlight-features)
     - [Added features](#added-features)
     - [Modified features](#modified-features)
-    - [User support](#user-support)
+    - [User Mode](#user-mode)
 - [Installation](#installation)
 - [Dependencies](#dependencies)
 - [Usage](#usage)
@@ -127,8 +127,10 @@ In addition, the member list now shows the full bot list (previously only the bo
 
 The bot will now receive Updates for all received media, even if a destruction timer is set.
 
-<a name="user-support"></a>
-### User Support
+<a name="user-mode"></a>
+### User Mode
+
+Enable user-mode with the command-line option `--user-mode`. User Mode is disabled by default.
 
 You can now log into the bot api with user accounts to create userbots running on your account.
 This functionality is currently in BETA.

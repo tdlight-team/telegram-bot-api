@@ -141,6 +141,9 @@ void ClientManager::send(PromisedQueryPtr query) {
 }
 
 void ClientManager::send_user(PromisedQueryPtr query) {
+  if (!parameters_->user_mode_){
+    return fail_query(401, "Unauthorized: User-mode is not enabled", std::move(query));
+  }
   if (close_flag_) {
     // automatically send 429
     return;
