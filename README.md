@@ -135,6 +135,8 @@ Enable user-mode with the command-line option `--user-mode`. User Mode is disabl
 You can now log into the bot api with user accounts to create userbots running on your account.
 This functionality is currently in BETA.
 
+Note: Never send your 2fa password over a plain http connection. Make sure https is enabled or use this api locally.
+
 #### User Authorization Process
 1. Create a random string with a length of `30 <= token_length <= 100`. This will work as your token and should not be 
    brute-forcible.
