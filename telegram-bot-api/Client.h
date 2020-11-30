@@ -83,6 +83,12 @@ class Client : public WebhookActor::Callback {
   static constexpr int CLOSING_ERROR_CODE = 500;
   static constexpr Slice CLOSING_ERROR_DESCRIPTION = "Internal Server Error: restart";
 
+  static constexpr int BOT_ONLY_ERROR_CODE = 405;
+  static constexpr Slice BOT_ONLY_ERROR_DESCRIPTION = "Method Not Allowed: You can only use this method as a bot";
+
+  static constexpr int USER_ONLY_ERROR_CODE = 405;
+  static constexpr Slice USER_ONLY_ERROR_DESCRIPTION = "Method Not Allowed: You can only use this method as a user";
+
   class JsonFile;
   class JsonDatedFile;
   class JsonDatedFiles;
