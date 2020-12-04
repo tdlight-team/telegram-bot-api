@@ -157,6 +157,8 @@ Some methods are (obviously) not available as a user. Your api wrapper may behav
 some cases, for examples command message-entities are not created in chats that don't contain any
 bots, so your Command Handler may not detect it.
 
+It is possible to have multiple tokens to multiple client instances on the same bot api server.
+
 <a name="installation"></a>
 ## Installation
 
