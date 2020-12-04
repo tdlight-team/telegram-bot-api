@@ -9470,6 +9470,12 @@ constexpr Client::Slice Client::LOGGING_OUT_ERROR_DESCRIPTION;
 constexpr int Client::CLOSING_ERROR_CODE;
 constexpr Client::Slice Client::CLOSING_ERROR_DESCRIPTION;
 
+constexpr int Client::BOT_ONLY_ERROR_CODE;
+constexpr Client::Slice Client::BOT_ONLY_ERROR_DESCRIPTION;
+
+constexpr int Client::USER_ONLY_ERROR_CODE;
+constexpr Client::Slice Client::USER_ONLY_ERROR_DESCRIPTION;
+
 std::unordered_map<td::string, td::Status (Client::*)(PromisedQueryPtr &query)> Client::methods_;
 
 }  // namespace telegram_bot_api
