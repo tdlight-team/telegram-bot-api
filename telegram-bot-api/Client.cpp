@@ -3305,7 +3305,7 @@ class Client::TdOnSendCustomRequestCallback : public TdQueryCallback {
 
 class Client::TdOnPingCallback : public TdQueryCallback {
  public:
-  TdOnPingCallback(PromisedQueryPtr query)
+  explicit TdOnPingCallback(PromisedQueryPtr query)
       : query_(std::move(query)) {
   }
 
@@ -6147,6 +6147,7 @@ td::Status Client::process_get_my_commands_query(PromisedQueryPtr &query) {
 }
 
 td::Status Client::process_set_my_commands_query(PromisedQueryPtr &query) {
+  CHECK_IS_BOT();
   TRY_RESULT(bot_commands, get_bot_commands(query.get()));
   send_request(make_object<td_api::setCommands>(std::move(bot_commands)),
                std::make_unique<TdOnOkQueryCallback>(std::move(query)));
@@ -6292,12 +6293,14 @@ td::Status Client::process_send_voice_query(PromisedQueryPtr &query) {
 }
 
 td::Status Client::process_send_game_query(PromisedQueryPtr &query) {
+  CHECK_IS_BOT();
   TRY_RESULT(game_short_name, get_required_string_arg(query.get(), "game_short_name"));
   do_send_message(make_object<td_api::inputMessageGame>(my_id_, game_short_name.str()), std::move(query));
   return Status::OK();
 }
 
 td::Status Client::process_send_invoice_query(PromisedQueryPtr &query) {
+  CHECK_IS_BOT();
   TRY_RESULT(title, get_required_string_arg(query.get(), "title"));
   TRY_RESULT(description, get_required_string_arg(query.get(), "description"));
   TRY_RESULT(payload, get_required_string_arg(query.get(), "payload"));
@@ -6435,6 +6438,7 @@ td::Status Client::process_stop_poll_query(PromisedQueryPtr &query) {
   auto chat_id = query->arg("chat_id");
   auto message_id = get_message_id(query.get());
   TRY_RESULT(reply_markup, get_reply_markup(query.get()));
+  CHECK_USER_REPLY_MARKUP();
 
   resolve_reply_markup_bot_usernames(
       std::move(reply_markup), std::move(query),
@@ -6530,6 +6534,7 @@ td::Status Client::process_edit_message_text_query(PromisedQueryPtr &query) {
   auto chat_id = query->arg("chat_id");
   auto message_id = get_message_id(query.get());
   TRY_RESULT(reply_markup, get_reply_markup(query.get()));
+  CHECK_USER_REPLY_MARKUP();
 
   if (chat_id.empty() && message_id == 0) {
     TRY_RESULT(inline_message_id, get_inline_message_id(query.get()));
@@ -6569,6 +6574,7 @@ td::Status Client::process_edit_message_live_location_query(PromisedQueryPtr &qu
   auto chat_id = query->arg("chat_id");
   auto message_id = get_message_id(query.get());
   TRY_RESULT(reply_markup, get_reply_markup(query.get()));
+  CHECK_USER_REPLY_MARKUP();
 
   if (chat_id.empty() && message_id == 0) {
     TRY_RESULT(inline_message_id, get_inline_message_id(query.get()));
@@ -6604,6 +6610,7 @@ td::Status Client::process_edit_message_media_query(PromisedQueryPtr &query) {
   auto chat_id = query->arg("chat_id");
   auto message_id = get_message_id(query.get());
   TRY_RESULT(reply_markup, get_reply_markup(query.get()));
+  CHECK_USER_REPLY_MARKUP();
   TRY_RESULT(input_media, get_input_media(query.get(), "media", false));
 
   if (chat_id.empty() && message_id == 0) {
@@ -6638,6 +6645,7 @@ td::Status Client::process_edit_message_caption_query(PromisedQueryPtr &query) {
   auto chat_id = query->arg("chat_id");
   auto message_id = get_message_id(query.get());
   TRY_RESULT(reply_markup, get_reply_markup(query.get()));
+  CHECK_USER_REPLY_MARKUP();
   TRY_RESULT(caption, get_caption(query.get()));
 
   if (chat_id.empty() && message_id == 0) {
@@ -6668,9 +6676,11 @@ td::Status Client::process_edit_message_caption_query(PromisedQueryPtr &query) {
 }
 
 td::Status Client::process_edit_message_reply_markup_query(PromisedQueryPtr &query) {
+  CHECK_IS_BOT();
   auto chat_id = query->arg("chat_id");
   auto message_id = get_message_id(query.get());
   TRY_RESULT(reply_markup, get_reply_markup(query.get()));
+  CHECK_USER_REPLY_MARKUP();
 
   if (chat_id.empty() && message_id == 0) {
     TRY_RESULT(inline_message_id, get_inline_message_id(query.get()));
@@ -6720,6 +6730,7 @@ td::Status Client::process_delete_message_query(PromisedQueryPtr &query) {
 }
 
 td::Status Client::process_set_game_score_query(PromisedQueryPtr &query) {
+  CHECK_IS_BOT();
   auto chat_id = query->arg("chat_id");
   auto message_id = get_message_id(query.get());
   TRY_RESULT(user_id, get_user_id(query.get()));
@@ -6757,6 +6768,7 @@ td::Status Client::process_set_game_score_query(PromisedQueryPtr &query) {
 }
 
 td::Status Client::process_get_game_high_scores_query(PromisedQueryPtr &query) {
+  CHECK_IS_BOT();
   auto chat_id = query->arg("chat_id");
   auto message_id = get_message_id(query.get());
   TRY_RESULT(user_id, get_user_id(query.get()));
@@ -6782,6 +6794,7 @@ td::Status Client::process_get_game_high_scores_query(PromisedQueryPtr &query) {
 }
 
 td::Status Client::process_answer_inline_query_query(PromisedQueryPtr &query) {
+  CHECK_IS_BOT();
   auto inline_query_id = td::to_integer<int64>(query->arg("inline_query_id"));
   auto is_personal = to_bool(query->arg("is_personal"));
   int32 cache_time = get_integer_arg(query.get(), "cache_time", 300, 0, 24 * 60 * 60);
@@ -6805,6 +6818,7 @@ td::Status Client::process_answer_inline_query_query(PromisedQueryPtr &query) {
 }
 
 td::Status Client::process_answer_callback_query_query(PromisedQueryPtr &query) {
+  CHECK_IS_BOT();
   auto callback_query_id = td::to_integer<int64>(query->arg("callback_query_id"));
   td::string text = query->arg("text").str();
   bool show_alert = to_bool(query->arg("show_alert"));
@@ -6817,6 +6831,7 @@ td::Status Client::process_answer_callback_query_query(PromisedQueryPtr &query) 
 }
 
 td::Status Client::process_answer_shipping_query_query(PromisedQueryPtr &query) {
+  CHECK_IS_BOT();
   auto shipping_query_id = td::to_integer<int64>(query->arg("shipping_query_id"));
   auto ok = to_bool(query->arg("ok"));
   td::vector<object_ptr<td_api::shippingOption>> shipping_options;
@@ -6833,6 +6848,7 @@ td::Status Client::process_answer_shipping_query_query(PromisedQueryPtr &query) 
 }
 
 td::Status Client::process_answer_pre_checkout_query_query(PromisedQueryPtr &query) {
+  CHECK_IS_BOT();
   auto pre_checkout_query_id = td::to_integer<int64>(query->arg("pre_checkout_query_id"));
   auto ok = to_bool(query->arg("ok"));
   td::MutableSlice error_message;
@@ -7310,6 +7326,7 @@ td::Status Client::process_get_sticker_set_query(PromisedQueryPtr &query) {
 }
 
 td::Status Client::process_upload_sticker_file_query(PromisedQueryPtr &query) {
+  CHECK_IS_BOT();
   TRY_RESULT(user_id, get_user_id(query.get()));
   auto png_sticker = get_input_file(query.get(), "png_sticker");
 
@@ -7322,6 +7339,7 @@ td::Status Client::process_upload_sticker_file_query(PromisedQueryPtr &query) {
 }
 
 td::Status Client::process_create_new_sticker_set_query(PromisedQueryPtr &query) {
+  CHECK_IS_BOT();
   TRY_RESULT(user_id, get_user_id(query.get()));
   auto name = query->arg("name");
   auto title = query->arg("title");
@@ -7338,6 +7356,7 @@ td::Status Client::process_create_new_sticker_set_query(PromisedQueryPtr &query)
 }
 
 td::Status Client::process_add_sticker_to_set_query(PromisedQueryPtr &query) {
+  CHECK_IS_BOT();
   TRY_RESULT(user_id, get_user_id(query.get()));
   auto name = query->arg("name");
   TRY_RESULT(stickers, get_input_stickers(query.get()));
@@ -7352,6 +7371,7 @@ td::Status Client::process_add_sticker_to_set_query(PromisedQueryPtr &query) {
 }
 
 td::Status Client::process_set_sticker_set_thumb_query(PromisedQueryPtr &query) {
+  CHECK_IS_BOT();
   TRY_RESULT(user_id, get_user_id(query.get()));
   auto name = query->arg("name");
   auto thumbnail = get_input_file(query.get(), "thumb");
@@ -7364,6 +7384,7 @@ td::Status Client::process_set_sticker_set_thumb_query(PromisedQueryPtr &query) 
 }
 
 td::Status Client::process_set_sticker_position_in_set_query(PromisedQueryPtr &query) {
+  CHECK_IS_BOT();
   auto file_id = trim(query->arg("sticker"));
   if (file_id.empty()) {
     return Status::Error(400, "Sticker is not specified");
@@ -7377,6 +7398,7 @@ td::Status Client::process_set_sticker_position_in_set_query(PromisedQueryPtr &q
 }
 
 td::Status Client::process_delete_sticker_from_set_query(PromisedQueryPtr &query) {
+  CHECK_IS_BOT();
   auto file_id = trim(query->arg("sticker"));
   if (file_id.empty()) {
     return Status::Error(400, "Sticker is not specified");
@@ -7388,6 +7410,7 @@ td::Status Client::process_delete_sticker_from_set_query(PromisedQueryPtr &query
 }
 
 td::Status Client::process_set_passport_data_errors_query(PromisedQueryPtr &query) {
+  CHECK_IS_BOT();
   TRY_RESULT(user_id, get_user_id(query.get()));
   TRY_RESULT(passport_element_errors, get_passport_element_errors(query.get()));
 
@@ -7885,6 +7908,9 @@ void Client::do_send_message(object_ptr<td_api::InputMessageContent> input_messa
     return fail_query_with_error(std::move(query), 400, r_reply_markup.error().message());
   }
   auto reply_markup = r_reply_markup.move_as_ok();
+  if (reply_markup != nullptr && is_user_) {
+    return fail_query_with_error(std::move(query), 405, "Method Not Allowed: reply markup not available as user.");
+  }
 
   resolve_reply_markup_bot_usernames(
       std::move(reply_markup), std::move(query),
