@@ -3313,7 +3313,7 @@ class Client::TdOnPingCallback : public TdQueryCallback {
     if (result->get_id() == td_api::error::ID) {
       return fail_query_with_error(std::move(query_), move_object_as<td_api::error>(result), "Server not available");
     }
-    CHECK(result->get_id() == 959899022); // id for return type `seconds`
+    CHECK(result->get_id() == td_api::seconds::ID);
 
     auto seconds_ = move_object_as<td_api::seconds>(result);
     answer_query(td::VirtuallyJsonableString(std::to_string(seconds_->seconds_)), std::move(query_));
