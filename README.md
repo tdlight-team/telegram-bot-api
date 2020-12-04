@@ -15,6 +15,7 @@ Please note that only TDLight-specific issues are suitable for this repository.
 - [TDLight features](#tdlight-features)
     - [Added features](#added-features)
     - [Modified features](#modified-features)
+    - [Allow Users](#allow-users)
 - [Installation](#installation)
 - [Dependencies](#dependencies)
 - [Usage](#usage)
@@ -125,6 +126,36 @@ The `User` object now has two new fields:
 In addition, the member list now shows the full bot list (previously only the bot that executed the query was shown)
 
 The bot will now receive Updates for all received media, even if a destruction timer is set.
+
+<a name="allow-users"></a>
+### Allow Users
+
+You can allow user accounts to access the bot api with the command-line option `--allow-users`. User Mode is disabled 
+by default, so only bots can access the api
+
+You can now log into the bot api with user accounts to create userbots running on your account.
+
+Note: Never send your 2fa password over a plain http connection. Make sure https is enabled or use this api locally.
+
+#### User Authorization Process
+1. Send a request to `{api_url}/userlogin?phone_number={your_phone_number}`
+   Returns your user-token as `string`
+   
+2. Send the received code to `{api_url}/user{your_random_token}/authcode?code=12345`
+   Will send ok on success. 
+   
+3. Optional: Send your 2fa password to `{api_url}/user{your_random_token}/2fapassword?password=12345`
+   Will send ok on success. 
+   
+You are now logged in and can use all methods like in the bot api, just replace the 
+`/bot<token>/` in your urls with `/user<token>/`. 
+   
+You only need to authenticate once, the account will stay logged in. You can use the `log_out` method to log out
+or simply close the session in your account settings.
+
+Some methods are (obviously) not available as a user. Your api wrapper may behave different in
+some cases, for examples command message-entities are not created in chats that don't contain any
+bots, so your Command Handler may not detect it.
 
 <a name="installation"></a>
 ## Installation
