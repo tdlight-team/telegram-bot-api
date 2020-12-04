@@ -34,6 +34,21 @@
 
 #include <cstdlib>
 
+#define CHECK_IS_BOT()                                                     \
+  if (is_user_) {                                                          \
+    return Status::Error(BOT_ONLY_ERROR_CODE, BOT_ONLY_ERROR_DESCRIPTION); \
+  }
+
+#define CHECK_IS_USER()                                                      \
+  if (!is_user_) {                                                           \
+    return Status::Error(USER_ONLY_ERROR_CODE, USER_ONLY_ERROR_DESCRIPTION); \
+  }
+
+#define CHECK_USER_REPLY_MARKUP()                                          \
+  if (reply_markup != nullptr && is_user_) {                               \
+    return Status::Error(BOT_ONLY_ERROR_CODE, BOT_ONLY_ERROR_DESCRIPTION); \
+  }
+
 namespace telegram_bot_api {
 
 using td::Jsonable;
@@ -156,11 +171,31 @@ void Client::fail_query_with_error(PromisedQueryPtr &&query, object_ptr<td_api::
   fail_query_with_error(std::move(query), error->code_, error->message_, default_message);
 }
 
-Client::Client(td::ActorShared<> parent, const td::string &bot_token, bool is_test_dc, int64 tqueue_id,
+Client::Client(td::ActorShared<> parent, const td::string &bot_token, bool is_user, bool is_test_dc, int64 tqueue_id,
                std::shared_ptr<const ClientParameters> parameters, td::ActorId<BotStatActor> stat_actor)
     : parent_(std::move(parent))
     , bot_token_(bot_token)
     , bot_token_id_("<unknown>")
+    , is_user_(is_user)
+    , is_test_dc_(is_test_dc)
+    , tqueue_id_(tqueue_id)
+    , parameters_(std::move(parameters))
+    , stat_actor_(std::move(stat_actor)) {
+  messages_lru_root_.lru_next = &messages_lru_root_;
+  messages_lru_root_.lru_prev = &messages_lru_root_;
+
+  static auto is_inited = init_methods();
+  CHECK(is_inited);
+}
+
+Client::Client(td::ActorShared<> parent, const td::string &bot_token, const td::string &phone_number, bool is_test_dc,
+               int64 tqueue_id, std::shared_ptr<const ClientParameters> parameters,
+               td::ActorId<BotStatActor> stat_actor)
+    : parent_(std::move(parent))
+    , bot_token_(bot_token)
+    , bot_token_id_("<unknown>")
+    , phone_number_(phone_number)
+    , is_user_(true)
     , is_test_dc_(is_test_dc)
     , tqueue_id_(tqueue_id)
     , parameters_(std::move(parameters))
@@ -2295,7 +2330,9 @@ class Client::TdOnAuthorizationCallback : public TdQueryCallback {
   }
 
   void on_result(object_ptr<td_api::Object> result) override {
-    bool was_ready = client_->authorization_state_->get_id() != td_api::authorizationStateWaitPhoneNumber::ID;
+    bool was_ready = client_->authorization_state_->get_id() != td_api::authorizationStateWaitPhoneNumber::ID &&
+                     client_->authorization_state_->get_id() != td_api::authorizationStateWaitCode::ID &&
+                     client_->authorization_state_->get_id() != td_api::authorizationStateWaitPassword::ID;
     if (result->get_id() == td_api::error::ID) {
       auto error = move_object_as<td_api::error>(result);
       if (error->code_ == 429 || error->code_ >= 500 || (error->code_ != 401 && was_ready)) {
@@ -2312,6 +2349,37 @@ class Client::TdOnAuthorizationCallback : public TdQueryCallback {
 
  private:
   Client *client_;
+};
+
+class Client::TdOnAuthorizationQueryCallback : public TdQueryCallback {
+ public:
+  TdOnAuthorizationQueryCallback(Client *client, PromisedQueryPtr query) :
+      client_(client), query_(std::move(query)) {
+  }
+
+  void on_result(object_ptr<td_api::Object> result) override {
+    bool was_ready = client_->authorization_state_->get_id() != td_api::authorizationStateWaitPhoneNumber::ID &&
+                     client_->authorization_state_->get_id() != td_api::authorizationStateWaitCode::ID &&
+                     client_->authorization_state_->get_id() != td_api::authorizationStateWaitPassword::ID;
+    if (result->get_id() == td_api::error::ID) {
+      auto error = move_object_as<td_api::error>(result);
+      if (error->code_ == 429 || error->code_ >= 500 || (error->code_ != 401 && was_ready)) {
+        // try again
+        return client_->on_update_authorization_state();
+      }
+      fail_query(401, "Unauthorized: Log in failed, logging out due to " + td::oneline(to_string(error)),
+                 std::move(query_));
+      LOG(WARNING) << "Logging out due to " << td::oneline(to_string(error));
+      client_->log_out();
+    } else if (was_ready) {
+      answer_query(td::JsonTrue(), std::move(query_));
+      client_->on_update_authorization_state();
+    }
+  }
+
+ private:
+  Client *client_;
+  PromisedQueryPtr query_;
 };
 
 class Client::TdOnInitCallback : public TdQueryCallback {
@@ -3381,7 +3449,7 @@ void Client::raw_event(const td::Event::Raw &event) {
 }
 
 void Client::loop() {
-  if (logging_out_ || closing_ || was_authorized_) {
+  if (logging_out_ || closing_ || was_authorized_ || waiting_for_auth_input_) {
     while (!cmd_queue_.empty()) {
       auto query = std::move(cmd_queue_.front());
       cmd_queue_.pop();
@@ -3942,9 +4010,19 @@ void Client::on_update_authorization_state() {
     case td_api::authorizationStateWaitEncryptionKey::ID:
       return send_request(make_object<td_api::checkDatabaseEncryptionKey>(), std::make_unique<TdOnInitCallback>(this));
     case td_api::authorizationStateWaitPhoneNumber::ID:
-      return send_request(make_object<td_api::checkAuthenticationBotToken>(bot_token_),
-                          std::make_unique<TdOnAuthorizationCallback>(this));
+      if (is_user_) {
+        return send_request(make_object<td_api::setAuthenticationPhoneNumber>(phone_number_, nullptr),
+            std::make_unique<TdOnAuthorizationCallback>(this));
+      } else {
+        return send_request(make_object<td_api::checkAuthenticationBotToken>(bot_token_),
+                            std::make_unique<TdOnAuthorizationCallback>(this));
+      }
+    case td_api::authorizationStateWaitCode::ID:
+    case td_api::authorizationStateWaitPassword::ID:
+      waiting_for_auth_input_ = true;
+      return loop();
     case td_api::authorizationStateReady::ID: {
+      waiting_for_auth_input_ = false;
       auto user_info = get_user_info(my_id_);
       if (my_id_ <= 0 || user_info == nullptr) {
         return send_request(make_object<td_api::getMe>(), std::make_unique<TdOnAuthorizationCallback>(this));
@@ -3965,12 +4043,14 @@ void Client::on_update_authorization_state() {
       return loop();
     }
     case td_api::authorizationStateLoggingOut::ID:
+      waiting_for_auth_input_ = false;
       if (!logging_out_) {
         LOG(WARNING) << "Logging out";
         logging_out_ = true;
       }
       break;
     case td_api::authorizationStateClosing::ID:
+      waiting_for_auth_input_ = false;
       if (!closing_) {
         LOG(WARNING) << "Closing";
         closing_ = true;
@@ -6024,6 +6104,15 @@ void Client::on_cmd(PromisedQueryPtr query) {
       return do_send_request(make_object<td_api::logOut>(), std::make_unique<TdOnOkQueryCallback>(std::move(query)));
     }
   }
+  if (waiting_for_auth_input_) {
+    if (query->method() == "authcode") {
+      return process_authcode_query(query);
+    } else if (query->method() == "2fapassword") {
+      return process_2fapassword_query(query);
+    } else {
+      return fail_query(404, "Not Found: method not found", std::move(query));
+    }
+  }
 
   if (logging_out_) {
     return fail_query(LOGGING_OUT_ERROR_CODE, LOGGING_OUT_ERROR_DESCRIPTION, std::move(query));
@@ -7429,7 +7518,6 @@ td::Status Client::process_get_file_query(PromisedQueryPtr &query) {
 }
 
 //start custom methods impl
-
 td::Status Client::process_get_message_info_query(PromisedQueryPtr &query) {
   auto chat_id = query->arg("chat_id");
   auto message_id = get_message_id(query.get(), "message_id");
@@ -7552,6 +7640,32 @@ td::Status Client::process_ping_query(PromisedQueryPtr &query) {
 }
 
 //end custom methods impl
+//start costom auth methods impl
+
+void Client::process_authcode_query(PromisedQueryPtr &query) {
+  auto code = query->arg("code");
+  if (code.empty()) {
+    return fail_query(400, "Bad Request: code not found", std::move(query));
+  }
+  if (authorization_state_->get_id() != td_api::authorizationStateWaitCode::ID) {
+    return fail_query(400, "Bad Request: currently not waiting for a code", std::move(query));
+  }
+  send_request(make_object<td_api::checkAuthenticationCode>(code.str()),
+               std::make_unique<TdOnAuthorizationQueryCallback>(this, std::move(query)));
+}
+
+void Client::process_2fapassword_query(PromisedQueryPtr &query) {
+  auto password = query->arg("password");
+  if (password.empty()) {
+    return fail_query(400, "Bad Request: password not found", std::move(query));
+  }
+  if (authorization_state_->get_id() != td_api::authorizationStateWaitPassword::ID) {
+    return fail_query(400, "Bad Request: currently not waiting for a password", std::move(query));
+  }
+  send_request(make_object<td_api::checkAuthenticationPassword>(password.str()),
+               std::make_unique<TdOnAuthorizationQueryCallback>(this, std::move(query)));
+  }
+//end custom auth methods impl
 
 void Client::do_get_file(object_ptr<td_api::file> file, PromisedQueryPtr query) {
   if ((!parameters_->local_mode_ || !parameters_->no_file_limit_) &&
