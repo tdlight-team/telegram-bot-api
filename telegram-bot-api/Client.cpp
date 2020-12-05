@@ -139,6 +139,9 @@ void Client::fail_query_with_error(PromisedQueryPtr query, int32 error_code, Sli
     case 403:
       prefix = Slice("Forbidden");
       break;
+    case 405:
+      prefix = Slice("Method Not Allowed");
+      break;
     case 500:
       prefix = Slice("Internal Server Error");
       break;
