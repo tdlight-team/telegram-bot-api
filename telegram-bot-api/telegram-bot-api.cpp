@@ -177,6 +177,8 @@ int main(int argc, char *argv[]) {
   options.add_option('\0', "local", "allow the Bot API server to serve local requests and disables the file limits",
                      [&] { parameters->local_mode_ = true; });
   options.add_option('\0', "allow-users", "allow user accounts to use the API", [&] { parameters->allow_users_ = true; });
+  options.add_option('\0', "allow-users-registration", "allow user accounts to be registered on the API",
+                     [&] { parameters->allow_users_registration_ = true; });
 
   options.add_checked_option(
       '\0', "api-id",

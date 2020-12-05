@@ -161,6 +161,9 @@ Note: Never send your 2fa password over a plain http connection. Make sure https
    
 4. Optional: Register the user by calling `{api_url}/user{user_token}/registerUser`. 
    
+   User registration is disabled by default. You can enable it with the `--allow-users-registration` command line
+   option or the env variable `TELEGRAM_ALLOW_USERS_REGISTRATION` set to `1` when using docker.
+   
    Parameters:
    - `first_name`: `string`. First name for the new account.
    - `last_name`: `string`, optional. Last name for the new account.

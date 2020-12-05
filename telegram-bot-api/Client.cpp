@@ -6117,7 +6117,7 @@ void Client::on_cmd(PromisedQueryPtr query) {
       return process_authcode_query(query);
     } else if (query->method() == "2fapassword") {
       return process_2fapassword_query(query);
-    } else if (query->method() == "registeruser") {
+    } else if (query->method() == "registeruser" && parameters_->allow_users_registration_) {
       return process_register_user_query(query);
     } else {
       return fail_query(404, "Not Found: method not found", std::move(query));

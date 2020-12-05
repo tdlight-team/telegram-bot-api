@@ -60,6 +60,7 @@ struct ClientParameters {
   bool use_relative_path_ = false;
   bool no_file_limit_ = true;
   bool allow_users_ = false;
+  bool allow_users_registration_ = false;
 
   td::int32 api_id_ = 0;
   td::string api_hash_;
