@@ -7705,11 +7705,14 @@ void Client::process_register_user_query(PromisedQueryPtr &query) {
   if (first_name.empty()) {
     return fail_query(400, "Bad Request: first_name not found", std::move(query));
   }
-  auto last_name = query->arg("last_name");
+  auto last_name = query->arg("last_name").str();
+  if (last_name.empty()){
+    last_name = nullptr;
+  }
   if (authorization_state_->get_id() != td_api::authorizationStateWaitRegistration::ID) {
     return fail_query(400, "Bad Request: currently not waiting for registration", std::move(query));
   }
-  send_request(make_object<td_api::registerUser>(first_name.str(), last_name.str()),
+  send_request(make_object<td_api::registerUser>(first_name.str(), last_name),
                std::make_unique<TdOnAuthorizationQueryCallback>(this, std::move(query)));
 }
 //end custom auth methods impl
