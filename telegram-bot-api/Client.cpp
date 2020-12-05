@@ -188,14 +188,14 @@ Client::Client(td::ActorShared<> parent, const td::string &bot_token, bool is_us
   CHECK(is_inited);
 }
 
-Client::Client(td::ActorShared<> parent, const td::string &bot_token, const td::string &phone_number, bool is_test_dc,
-               int64 tqueue_id, std::shared_ptr<const ClientParameters> parameters,
+Client::Client(td::ActorShared<> parent, const td::string &bot_token, const td::string &phone_number, bool is_user,
+               bool is_test_dc, int64 tqueue_id, std::shared_ptr<const ClientParameters> parameters,
                td::ActorId<BotStatActor> stat_actor)
     : parent_(std::move(parent))
     , bot_token_(bot_token)
     , bot_token_id_("<unknown>")
     , phone_number_(phone_number)
-    , is_user_(true)
+    , is_user_(is_user)
     , is_test_dc_(is_test_dc)
     , tqueue_id_(tqueue_id)
     , parameters_(std::move(parameters))

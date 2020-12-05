@@ -81,16 +81,16 @@ void ClientManager::send(PromisedQueryPtr query) {
     token += "/test";
   }
 
+  auto bot_token_with_dc = PSTRING() << query->token() << (query->is_test_dc() ? ":T" : "");
+  if (parameters_->shared_data_->user_db_->get(bot_token_with_dc).empty() == query->is_user()) {
+    return fail_query(400, "Bad Request: Please use the correct api endpoint for bots or users", std::move(query));
+  }
+
   auto id_it = token_to_id_.find(token);
   if (id_it == token_to_id_.end()) {
     if (!check_flood_limits(query)) {
       return;
     }
-    auto bot_token_with_dc = PSTRING() << query->token() << (query->is_test_dc() ? ":T" : "");
-    if (parameters_->shared_data_->user_db_->get(bot_token_with_dc).empty() == query->is_user()) {
-      return fail_query(400, "Bad Request: Please use the correct api endpoint for bots or users", std::move(query));
-    }
-
     auto id = clients_.create(ClientInfo{BotStatActor(stat_.actor_id(&stat_)), token, td::ActorOwn<Client>()});
     auto *client_info = clients_.get(id);
     auto stat_actor = client_info->stat_.actor_id(&client_info->stat_);
@@ -147,7 +147,7 @@ void ClientManager::user_login(PromisedQueryPtr query) {
   auto stat_actor = client_info->stat_.actor_id(&client_info->stat_);
   auto client_id = td::create_actor<Client>(
       PSLICE() << "Client/" << user_token, actor_shared(this, id), user_token, td::to_string(phone_number),
-      query->is_test_dc(), get_tqueue_id(token_hash, query->is_test_dc()), parameters_, std::move(stat_actor));
+      true, query->is_test_dc(), get_tqueue_id(token_hash, query->is_test_dc()), parameters_, std::move(stat_actor));
 
   clients_.get(id)->client_ = std::move(client_id);
   auto id_it = token_to_id_.end();

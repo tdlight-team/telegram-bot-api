@@ -41,8 +41,9 @@ class Client : public WebhookActor::Callback {
   Client(td::ActorShared<> parent, const td::string &bot_token, bool is_user, bool is_test_dc, td::int64 tqueue_id,
          std::shared_ptr<const ClientParameters> parameters, td::ActorId<BotStatActor> stat_actor);
 
-  Client(td::ActorShared<> parent, const td::string &bot_token, const td::string &phone_number, bool is_test_dc,
-         td::int64 tqueue_id, std::shared_ptr<const ClientParameters> parameters, td::ActorId<BotStatActor> stat_actor);
+  Client(td::ActorShared<> parent, const td::string &bot_token, const td::string &phone_number, bool is_user,
+         bool is_test_dc, td::int64 tqueue_id, std::shared_ptr<const ClientParameters> parameters,
+         td::ActorId<BotStatActor> stat_actor);
 
   void send(PromisedQueryPtr query) override;
 
