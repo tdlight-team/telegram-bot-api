@@ -15,7 +15,7 @@ Please note that only TDLight-specific issues are suitable for this repository.
 - [TDLight features](#tdlight-features)
     - [Added features](#added-features)
     - [Modified features](#modified-features)
-    - [Allow Users](#allow-users)
+    - [User Mode](#user-mode)
 - [Installation](#installation)
 - [Dependencies](#dependencies)
 - [Usage](#usage)
@@ -127,8 +127,8 @@ In addition, the member list now shows the full bot list (previously only the bo
 
 The bot will now receive Updates for all received media, even if a destruction timer is set.
 
-<a name="allow-users"></a>
-### Allow Users
+<a name="user-mode"></a>
+### User Mode
 
 You can allow user accounts to access the bot api with the command-line option `--allow-users` or set the env variable 
 `TELEGRAM_ALLOW_USERS` to `1` when using docker. User Mode is disabled by default, so only bots can access the api.
