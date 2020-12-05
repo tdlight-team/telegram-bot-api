@@ -41,7 +41,7 @@ void HttpConnection::handle(td::unique_ptr<td::HttpQuery> http_query,
   }
 
   td::MutableSlice token;
-  bool is_test_dc;
+  bool is_test_dc = false;
   td::MutableSlice method;
   if (!is_login) {
     token = url_path_parser.read_till('/');

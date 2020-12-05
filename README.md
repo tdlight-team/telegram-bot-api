@@ -139,25 +139,45 @@ Note: Never send your 2fa password over a plain http connection. Make sure https
 
 #### User Authorization Process
 1. Send a request to `{api_url}/userlogin?phone_number={your_phone_number}`
-   Returns your user-token as `string`
+   Returns your `user_token` as `string`. You can use this just like a normal bot token on the `/user` endpoint
    
-2. Send the received code to `{api_url}/user{your_random_token}/authcode?code=12345`
-   Will send ok on success. 
+2. Send the received code to `{api_url}/user{user_token}/authcode?code=12345`
+   Will send `{"ok": true}` on success. 
    
 3. Optional: Send your 2fa password to `{api_url}/user{your_random_token}/2fapassword?password=12345`
-   Will send ok on success. 
+   Will send `{"ok": true}` on success. 
    
 You are now logged in and can use all methods like in the bot api, just replace the 
-`/bot<token>/` in your urls with `/user<token>/`. 
+`/bot{bot_token}/` in your urls with `/user{token}/`. 
    
-You only need to authenticate once, the account will stay logged in. You can use the `log_out` method to log out
+You only need to authenticate once, the account will stay logged in. You can use the `logOut` method to log out
 or simply close the session in your account settings.
 
-Some methods are (obviously) not available as a user. Your api wrapper may behave different in
+Some methods are (obviously) not available as a user. This includes:
+- `answerCallbackQuery`
+- `setMyCommands`
+- `editMessageReplyMarkup`
+- `uploadStickerFile`
+- `createNewStickerSet`
+- `addStickerToSet`
+- `setStickerPositionInSet`
+- `deleteStickerFromSet`
+- `setStickerSetThumb`
+- `sendInvoice`
+- `answerShippingQuery`
+- `answerPreCheckoutQuery`
+- `setPassportDataErrors`
+- `sendGame`
+- `setGameScore`
+- `getGameHighscores`
+
+It is also not possible to attach a `reply_markup` to any message.
+
+Your api wrapper may behave different in
 some cases, for examples command message-entities are not created in chats that don't contain any
 bots, so your Command Handler may not detect it.
 
-It is possible to have multiple tokens to multiple client instances on the same bot api server.
+It is possible to have multiple user-tokens to multiple client instances on the same bot api server.
 
 <a name="installation"></a>
 ## Installation

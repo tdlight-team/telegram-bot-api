@@ -7546,6 +7546,7 @@ td::Status Client::process_get_file_query(PromisedQueryPtr &query) {
 }
 
 //start custom methods impl
+
 td::Status Client::process_get_message_info_query(PromisedQueryPtr &query) {
   auto chat_id = query->arg("chat_id");
   auto message_id = get_message_id(query.get(), "message_id");

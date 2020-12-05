@@ -65,7 +65,7 @@ void ClientManager::send(PromisedQueryPtr query) {
     return;
   }
   if (!parameters_->allow_users_ && query->is_user()) {
-    return fail_query(400, "Bad Request: Users are not allowed to use the api", std::move(query));
+    return fail_query(405, "Method Not Allowed: Users are not allowed to use the api", std::move(query));
   }
   td::string token = query->token().str();
   if (token[0] == '0' || token.size() > 80u || token.find('/') != td::string::npos ||
@@ -123,7 +123,7 @@ void ClientManager::user_login(PromisedQueryPtr query) {
     return;
   }
   if (!parameters_->allow_users_) {
-    return fail_query(400, "Bad Request: Users are not allowed to use the api", std::move(query));
+    return fail_query(405, "Method Not Allowed: Users are not allowed to use the api", std::move(query));
   }
   td::MutableSlice r_phone_number = query->arg("phone_number");
   if (r_phone_number.size() < 5 || r_phone_number.size() > 15) {
