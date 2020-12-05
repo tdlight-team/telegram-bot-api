@@ -130,21 +130,41 @@ The bot will now receive Updates for all received media, even if a destruction t
 <a name="allow-users"></a>
 ### Allow Users
 
-You can allow user accounts to access the bot api with the command-line option `--allow-users`. User Mode is disabled 
-by default, so only bots can access the api
+You can allow user accounts to access the bot api with the command-line option `--allow-users` or set the env variable 
+`TELEGRAM_ALLOW_USERS` to `1` when using docker. User Mode is disabled by default, so only bots can access the api.
 
 You can now log into the bot api with user accounts to create userbots running on your account.
 
 Note: Never send your 2fa password over a plain http connection. Make sure https is enabled or use this api locally.
 
 #### User Authorization Process
-1. Send a request to `{api_url}/userlogin?phone_number={your_phone_number}`
+1. Send a request to `{api_url}/userlogin`
+
+   Parameters:
+   - `phone_number`: `string`. The phone number of your Telegram Account.
+   
    Returns your `user_token` as `string`. You can use this just like a normal bot token on the `/user` endpoint
    
-2. Send the received code to `{api_url}/user{user_token}/authcode?code=12345`
+2. Send the received code to `{api_url}/user{user_token}/authcode`
+
+   Parameters:
+   - `code`: `int`. The code send to you by Telegram In-App or by SMS
+   
    Will send `{"ok": true, "result": true}` on success. 
    
-3. Optional: Send your 2fa password to `{api_url}/user{your_random_token}/2fapassword?password=12345`
+3. Optional: Send your 2fa password to `{api_url}/user{user_token}/2fapassword`
+   
+   Parameters:
+   - `password`: `string`. Password for 2fa authentication
+   
+   Will send `{"ok": true, "result": true}` on success. 
+   
+4. Optional: Register the user by calling `{api_url}/user{user_token}/registerUser`. 
+   
+   Parameters:
+   - `first_name`: `string`. First name for the new account.
+   - `last_name`: `string`, optional. Last name for the new account.
+   
    Will send `{"ok": true, "result": true}` on success. 
    
 You are now logged in and can use all methods like in the bot api, just replace the 

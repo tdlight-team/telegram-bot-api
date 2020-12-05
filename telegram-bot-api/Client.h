@@ -511,6 +511,7 @@ class Client : public WebhookActor::Callback {
   //custom auth methods
   void process_authcode_query(PromisedQueryPtr &query);
   void process_2fapassword_query(PromisedQueryPtr &query);
+  void process_register_user_query(PromisedQueryPtr &query);
 
 
   void webhook_verified(td::string cached_ip_address) override;

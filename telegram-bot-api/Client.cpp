@@ -2332,7 +2332,8 @@ class Client::TdOnAuthorizationCallback : public TdQueryCallback {
   void on_result(object_ptr<td_api::Object> result) override {
     bool was_ready = client_->authorization_state_->get_id() != td_api::authorizationStateWaitPhoneNumber::ID &&
                      client_->authorization_state_->get_id() != td_api::authorizationStateWaitCode::ID &&
-                     client_->authorization_state_->get_id() != td_api::authorizationStateWaitPassword::ID;
+                     client_->authorization_state_->get_id() != td_api::authorizationStateWaitPassword::ID &&
+                     client_->authorization_state_->get_id() != td_api::authorizationStateWaitRegistration::ID;
     if (result->get_id() == td_api::error::ID) {
       auto error = move_object_as<td_api::error>(result);
       if (error->code_ == 429 || error->code_ >= 500 || (error->code_ != 401 && was_ready)) {
@@ -2360,7 +2361,8 @@ class Client::TdOnAuthorizationQueryCallback : public TdQueryCallback {
   void on_result(object_ptr<td_api::Object> result) override {
     bool was_ready = client_->authorization_state_->get_id() != td_api::authorizationStateWaitPhoneNumber::ID &&
                      client_->authorization_state_->get_id() != td_api::authorizationStateWaitCode::ID &&
-                     client_->authorization_state_->get_id() != td_api::authorizationStateWaitPassword::ID;
+                     client_->authorization_state_->get_id() != td_api::authorizationStateWaitPassword::ID &&
+                     client_->authorization_state_->get_id() != td_api::authorizationStateWaitRegistration::ID;
     if (result->get_id() == td_api::error::ID) {
       auto error = move_object_as<td_api::error>(result);
       if (error->code_ == 429 || error->code_ >= 500 || (error->code_ != 401 && was_ready)) {
@@ -4024,6 +4026,7 @@ void Client::on_update_authorization_state() {
       }
     case td_api::authorizationStateWaitCode::ID:
     case td_api::authorizationStateWaitPassword::ID:
+    case td_api::authorizationStateWaitRegistration::ID:
       waiting_for_auth_input_ = true;
       return loop();
     case td_api::authorizationStateReady::ID: {
@@ -6114,6 +6117,8 @@ void Client::on_cmd(PromisedQueryPtr query) {
       return process_authcode_query(query);
     } else if (query->method() == "2fapassword") {
       return process_2fapassword_query(query);
+    } else if (query->method() == "registeruser") {
+      return process_register_user_query(query);
     } else {
       return fail_query(404, "Not Found: method not found", std::move(query));
     }
@@ -7693,7 +7698,20 @@ void Client::process_2fapassword_query(PromisedQueryPtr &query) {
   }
   send_request(make_object<td_api::checkAuthenticationPassword>(password.str()),
                std::make_unique<TdOnAuthorizationQueryCallback>(this, std::move(query)));
+}
+
+void Client::process_register_user_query(PromisedQueryPtr &query) {
+  auto first_name = query->arg("first_name");
+  if (first_name.empty()) {
+    return fail_query(400, "Bad Request: first_name not found", std::move(query));
   }
+  auto last_name = query->arg("last_name");
+  if (authorization_state_->get_id() != td_api::authorizationStateWaitRegistration::ID) {
+    return fail_query(400, "Bad Request: currently not waiting for registration", std::move(query));
+  }
+  send_request(make_object<td_api::registerUser>(first_name.str(), last_name.str()),
+               std::make_unique<TdOnAuthorizationQueryCallback>(this, std::move(query)));
+}
 //end custom auth methods impl
 
 void Client::do_get_file(object_ptr<td_api::file> file, PromisedQueryPtr query) {
