@@ -142,10 +142,10 @@ Note: Never send your 2fa password over a plain http connection. Make sure https
    Returns your `user_token` as `string`. You can use this just like a normal bot token on the `/user` endpoint
    
 2. Send the received code to `{api_url}/user{user_token}/authcode?code=12345`
-   Will send `{"ok": true}` on success. 
+   Will send `{"ok": true, "result": true}` on success. 
    
 3. Optional: Send your 2fa password to `{api_url}/user{your_random_token}/2fapassword?password=12345`
-   Will send `{"ok": true}` on success. 
+   Will send `{"ok": true, "result": true}` on success. 
    
 You are now logged in and can use all methods like in the bot api, just replace the 
 `/bot{bot_token}/` in your urls with `/user{token}/`. 
