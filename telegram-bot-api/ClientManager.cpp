@@ -202,7 +202,8 @@ bool ClientManager::check_flood_limits(PromisedQueryPtr &query, bool is_user_log
 }
 
 void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
-                              td::vector<std::pair<td::string, td::string>> args) {
+                              td::vector<std::pair<td::string, td::string>> args,
+                              bool as_json) {
   if (close_flag_) {
     promise.set_value(td::BufferSlice("Closing"));
     return;
@@ -210,6 +211,10 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
   size_t buf_size = 1 << 14;
   auto buf = td::StackAllocator::alloc(buf_size);
   td::StringBuilder sb(buf.as_slice());
+  td::JsonBuilder jb = null;
+  if(json) {
+    jb(StringBuilder(buf.as_slice(), true), -1);
+  }
 
   td::Slice id_filter;
   for (auto &arg : args) {
@@ -289,7 +294,7 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
     sb << "\n";
     sb << "id\t" << bot_info.id_ << "\n";
     sb << "uptime\t" << now - bot_info.start_time_ << "\n";
-    sb << "token\t" << bot_info.token_ << "\n";
+    // sb << "token\t" << bot_info.token_ << "\n";
     sb << "username\t" << bot_info.username_ << "\n";
     sb << "webhook\t" << bot_info.webhook_ << "\n";
     sb << "has_custom_certificate\t" << bot_info.has_webhook_certificate_ << "\n";
