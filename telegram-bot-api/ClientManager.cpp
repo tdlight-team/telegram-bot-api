@@ -300,6 +300,10 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
     }
 
     if(as_json) {
+      jb_root("buffer_memory", JsonStatsSize(td::BufferAllocator::get_buffer_mem()));
+      jb_root("active_webhook_connections", td::JsonLong(WebhookActor::get_total_connections_count()));
+      jb_root("active_requests", td::JsonLong(parameters_->shared_data_->query_count_.load()));
+      jb_root("active_network_queries", td::JsonLong(td::get_pending_network_query_count(*parameters_->net_query_stats_)));
     } else {
       sb << "buffer_memory\t" << td::format::as_size(td::BufferAllocator::get_buffer_mem()) << "\n";
       sb << "active_webhook_connections\t" << WebhookActor::get_total_connections_count() << "\n";
