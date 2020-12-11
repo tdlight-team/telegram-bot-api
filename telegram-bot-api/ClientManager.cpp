@@ -356,7 +356,7 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
   }
 
   // ignore sb overflow
-  promise.set_value(td::BufferSlice(jb.string_builder().as_cslice()));
+  promise.set_value(td::BufferSlice((as_json ? jb.string_builder() : sb).as_cslice()));
 }
 
 td::int64 ClientManager::get_tqueue_id(td::int64 user_id, bool is_test_dc) {
