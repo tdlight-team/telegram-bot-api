@@ -315,13 +315,14 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
     }
   }
 
+  if(as_json) {
+    jb_root("bots", JsonStatsBots(&top_bot_ids));
+  } else {
   for (auto top_bot_id : top_bot_ids) {
-    auto *client_info = clients_.get(top_bot_id.second);
-    CHECK(client_info);
+      auto *client_info = clients_.get(top_bot_id.second);
+      CHECK(client_info);
+      auto bot_info = client_info->client_->get_actor_unsafe()->get_bot_info();
 
-    auto bot_info = client_info->client_->get_actor_unsafe()->get_bot_info();
-    if(as_json) {
-    } else {
       sb << "\n";
       sb << "id\t" << bot_info.id_ << "\n";
       sb << "uptime\t" << now - bot_info.start_time_ << "\n";
@@ -342,10 +343,9 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
           sb << stat.key_ << "/sec\t" << stat.value_ << "\n";
         }
       }
-    }
-
-    if (sb.is_error()) {
-      break;
+      if (sb.is_error()) {
+        break;
+      }
     }
   }
   // ignore sb overflow

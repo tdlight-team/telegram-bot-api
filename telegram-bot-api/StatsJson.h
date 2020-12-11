@@ -134,45 +134,31 @@ class JsonStatsCpu : public td::Jsonable {
 
 class JsonStatsBot : public td::Jsonable {
  public:
-  JsonStatsBot(const ServerBotInfo *bot, const bool hide_sensible_data) :
-      bot_(bot), hide_sensible_data_(hide_sensible_data) {
+  JsonStatsBot(const std::pair<td::int64, td::uint64> *score_id_pair) : score_id_pair_(score_id_pair) {
   }
   void store(td::JsonValueScope *scope) const {
     auto object = scope->enter_object();
-    object("id", td::JsonRaw(bot_->id_));
-    // object("uptime", now - bot_->start_time_);
-    if (!hide_sensible_data_) {
-      object("token", bot_->token_);
-    }
-    object("username", bot_->username_);
-    object("webhook", bot_->webhook_);
-    object("has_custom_certificate", bot_->has_webhook_certificate_);
-    object("head_update_id", bot_->head_update_id_);
-    object("tail_update_id", bot_->tail_update_id_);
-    object("pending_update_count", bot_->pending_update_count_);
-    object("webhook_max_connections", bot_->webhook_max_connections_);
+    object("score", td::JsonLong(score_id_pair_->first));
+    object("internal_id", td::JsonLong(score_id_pair_->second));
   }
 
  private:
-  const ServerBotInfo *bot_;
-  const bool hide_sensible_data_;
+  const std::pair<td::int64, td::uint64> *score_id_pair_;
 };
 
 
 class JsonStatsBots : public td::Jsonable {
  public:
-  JsonStatsBots(const td::vector<ServerBotInfo> *bots, const bool hide_sensible_data):
-      bots_(bots), hide_sensible_data_(hide_sensible_data) {
+  JsonStatsBots(std::multimap<td::int64, td::uint64> *score_id_map): score_id_map_(score_id_map) {
   }
   void store(td::JsonValueScope *scope) const {
     auto array = scope->enter_array();
-    for (const auto& bot: *bots_) {
-      array << JsonStatsBot(bot, hide_sensible_data);
-      }
+    for (const std::pair<td::int64, td::uint64> score_id_pair: *score_id_map_) {
+      array << JsonStatsBot(&score_id_pair);
     }
+  }
  private:
-  const td::vector<ServerBotInfo> *bots;
-  const bool hide_sensible_data;
+  const std::multimap<td::int64, td::uint64> *score_id_map_;
 };
 
 
