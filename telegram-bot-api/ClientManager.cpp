@@ -352,6 +352,10 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
       }
     }
   }
+  if(as_json) {
+    jb_root.leave();
+  }
+
   // ignore sb overflow
   promise.set_value(td::BufferSlice(jb.string_builder().as_cslice()));
 }
