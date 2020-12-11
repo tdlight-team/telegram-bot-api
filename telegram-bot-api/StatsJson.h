@@ -132,4 +132,48 @@ class JsonStatsCpu : public td::Jsonable {
   const td::vector<td::vector<StatItem>> *cpu_stats_;
 };
 
+class JsonStatsBot : public td::Jsonable {
+ public:
+  JsonStatsBot(const ServerBotInfo *bot, const bool hide_sensible_data) :
+      bot_(bot), hide_sensible_data_(hide_sensible_data) {
+  }
+  void store(td::JsonValueScope *scope) const {
+    auto object = scope->enter_object();
+    object("id", td::JsonRaw(bot_->id_));
+    // object("uptime", now - bot_->start_time_);
+    if (!hide_sensible_data_) {
+      object("token", bot_->token_);
+    }
+    object("username", bot_->username_);
+    object("webhook", bot_->webhook_);
+    object("has_custom_certificate", bot_->has_webhook_certificate_);
+    object("head_update_id", bot_->head_update_id_);
+    object("tail_update_id", bot_->tail_update_id_);
+    object("pending_update_count", bot_->pending_update_count_);
+    object("webhook_max_connections", bot_->webhook_max_connections_);
+  }
+
+ private:
+  const ServerBotInfo *bot_;
+  const bool hide_sensible_data_;
+};
+
+
+class JsonStatsBots : public td::Jsonable {
+ public:
+  JsonStatsBots(const td::vector<ServerBotInfo> *bots, const bool hide_sensible_data):
+      bots_(bots), hide_sensible_data_(hide_sensible_data) {
+  }
+  void store(td::JsonValueScope *scope) const {
+    auto array = scope->enter_array();
+    for (const auto& bot: *bots_) {
+      array << JsonStatsBot(bot, hide_sensible_data);
+      }
+    }
+ private:
+  const td::vector<ServerBotInfo> *bots;
+  const bool hide_sensible_data;
+};
+
+
 }  // namespace telegram_bot_api
