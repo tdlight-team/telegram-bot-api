@@ -328,7 +328,7 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
       auto client_info = clients_.get(top_bot_id.second);
       CHECK(client_info);
       ServerBotInfo bot_info = client_info->client_->get_actor_unsafe()->get_bot_info();
-      JsonStatsBotAdvanced bot(&top_bot_id, &bot_info, parameters_->stats_hide_token_);
+      JsonStatsBotAdvanced bot(&top_bot_id, &bot_info, parameters_->stats_hide_sensible_data_);
       bots.push_back(bot);
     }
     jb_root("bots", JsonStatsBots(&bots, false && bots.size() > 100));
@@ -341,7 +341,7 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
       sb << "\n";
       sb << "id\t" << bot_info.id_ << "\n";
       sb << "uptime\t" << now - bot_info.start_time_ << "\n";
-      if (!parameters_->stats_hide_token_) {
+      if (!parameters_->stats_hide_sensible_data_) {
         sb << "token\t" << bot_info.token_ << "\n";
       }
       sb << "username\t" << bot_info.username_ << "\n";
