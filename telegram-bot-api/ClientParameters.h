@@ -77,6 +77,7 @@ struct ClientParameters {
   std::shared_ptr<SharedData> shared_data_;
 
   std::shared_ptr<td::NetQueryStats> net_query_stats_;
+  // Todod
 };
 
 }  // namespace telegram_bot_api

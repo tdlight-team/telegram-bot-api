@@ -1,5 +1,5 @@
 //
-// Copyright Aliaksei Levin (levlam@telegram.org), Arseny Smirnov (arseny30@gmail.com) 2014-2020
+// Copyright Aliaksei Levin (levlam@telegram.org), Arseny Smirnov (arseny30@gmail.com) 2014-2020, Luckydonald (tdlight-telegram-bot-api+code@luckydonald.de) 2020
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -9,6 +9,7 @@
 #include "telegram-bot-api/Client.h"
 #include "telegram-bot-api/ClientParameters.h"
 #include "telegram-bot-api/WebhookActor.h"
+#include "telegram-bot-api/StatsJson.h"
 
 #include "td/telegram/ClientActor.h"
 
@@ -208,13 +209,12 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
     promise.set_value(td::BufferSlice("Closing"));
     return;
   }
-  size_t buf_size = 1 << 14;
+  as_json = true;
+  size_t buf_size = 1 << 18;
   auto buf = td::StackAllocator::alloc(buf_size);
-  td::StringBuilder sb(buf.as_slice());
-  td::JsonBuilder jb = null;
-  if(json) {
-    jb(StringBuilder(buf.as_slice(), true), -1);
-  }
+  td::JsonBuilder jb(td::StringBuilder(buf.as_slice(), true), -1);
+  td::StringBuilder sb = std::move(jb.string_builder());
+  auto jb_root = jb.enter_object();
 
   td::Slice id_filter;
   for (auto &arg : args) {
@@ -254,35 +254,64 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
     top_bot_ids.emplace(static_cast<td::int64>(score * 1e9), id);
   }
 
-  sb << stat_.get_description() << "\n";
+  if(!as_json) {
+    sb << stat_.get_description() << "\n";
+  }
   if (id_filter.empty()) {
-    sb << "uptime\t" << now - parameters_->start_time_ << "\n";
-    sb << "bot_count\t" << clients_.size() << "\n";
-    sb << "active_bot_count\t" << active_bot_count << "\n";
+    if(as_json) {
+      jb_root("uptime", td::JsonFloat(now - parameters_->start_time_));
+    } else {
+      sb << "uptime\t" << now - parameters_->start_time_ << "\n";
+    }
+    if(as_json) {
+      jb_root("bot_count", td::JsonLong(clients_.size()));
+    } else {
+      sb << "bot_count\t" << clients_.size() << "\n";
+    }
+    if(as_json) {
+      jb_root("active_bot_count", td::JsonInt(active_bot_count));
+    } else {
+      sb << "active_bot_count\t" << active_bot_count << "\n";
+    }
     auto r_mem_stat = td::mem_stat();
     if (r_mem_stat.is_ok()) {
       auto mem_stat = r_mem_stat.move_as_ok();
-      sb << "rss\t" << td::format::as_size(mem_stat.resident_size_) << "\n";
-      sb << "vm\t" << td::format::as_size(mem_stat.virtual_size_) << "\n";
-      sb << "rss_peak\t" << td::format::as_size(mem_stat.resident_size_peak_) << "\n";
-      sb << "vm_peak\t" << td::format::as_size(mem_stat.virtual_size_peak_) << "\n";
+      if(as_json) {
+        jb_root("memory", JsonStatsMem(&mem_stat));
+      } else {
+        sb << "rss\t" << td::format::as_size(mem_stat.resident_size_) << "\n";
+        sb << "vm\t" << td::format::as_size(mem_stat.virtual_size_) << "\n";
+        sb << "rss_peak\t" << td::format::as_size(mem_stat.resident_size_peak_) << "\n";
+        sb << "vm_peak\t" << td::format::as_size(mem_stat.virtual_size_peak_) << "\n";
+      }
     } else {
       LOG(INFO) << "Failed to get memory statistics: " << r_mem_stat.error();
     }
 
     ServerCpuStat::update(td::Time::now());
-    auto cpu_stats = ServerCpuStat::instance().as_vector(td::Time::now());
-    for (auto &stat : cpu_stats) {
-      sb << stat.key_ << "\t" << stat.value_ << "\n";
+    if(as_json) {
+      auto cpu_stats = ServerCpuStat::instance().as_vector_vector(td::Time::now());
+      jb_root("cpu", JsonStatsCpu(&cpu_stats));
+    } else {
+      auto cpu_stats = ServerCpuStat::instance().as_vector(td::Time::now());
+      for (auto &stat : cpu_stats) {
+        sb << stat.key_ << "\t" << stat.value_ << "\n";
+      }
     }
 
-    sb << "buffer_memory\t" << td::format::as_size(td::BufferAllocator::get_buffer_mem()) << "\n";
-    sb << "active_webhook_connections\t" << WebhookActor::get_total_connections_count() << "\n";
-    sb << "active_requests\t" << parameters_->shared_data_->query_count_.load() << "\n";
-    sb << "active_network_queries\t" << td::get_pending_network_query_count(*parameters_->net_query_stats_) << "\n";
-    auto stats = stat_.as_vector(now);
-    for (auto &stat : stats) {
-      sb << stat.key_ << "\t" << stat.value_ << "\n";
+    if(as_json) {
+    } else {
+      sb << "buffer_memory\t" << td::format::as_size(td::BufferAllocator::get_buffer_mem()) << "\n";
+      sb << "active_webhook_connections\t" << WebhookActor::get_total_connections_count() << "\n";
+      sb << "active_requests\t" << parameters_->shared_data_->query_count_.load() << "\n";
+      sb << "active_network_queries\t" << td::get_pending_network_query_count(*parameters_->net_query_stats_) << "\n";
+    }
+    if(as_json) {
+    } else {
+      auto stats = stat_.as_vector(now);
+      for (auto &stat : stats) {
+        sb << stat.key_ << "\t" << stat.value_ << "\n";
+      }
     }
   }
 
@@ -291,24 +320,27 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
     CHECK(client_info);
 
     auto bot_info = client_info->client_->get_actor_unsafe()->get_bot_info();
-    sb << "\n";
-    sb << "id\t" << bot_info.id_ << "\n";
-    sb << "uptime\t" << now - bot_info.start_time_ << "\n";
-    if (!parameters_->stats_hide_token_) {
-      sb << "token\t" << bot_info.token_ << "\n";
-    }
-    sb << "username\t" << bot_info.username_ << "\n";
-    sb << "webhook\t" << bot_info.webhook_ << "\n";
-    sb << "has_custom_certificate\t" << bot_info.has_webhook_certificate_ << "\n";
-    sb << "head_update_id\t" << bot_info.head_update_id_ << "\n";
-    sb << "tail_update_id\t" << bot_info.tail_update_id_ << "\n";
-    sb << "pending_update_count\t" << bot_info.pending_update_count_ << "\n";
-    sb << "webhook_max_connections\t" << bot_info.webhook_max_connections_ << "\n";
+    if(as_json) {
+    } else {
+      sb << "\n";
+      sb << "id\t" << bot_info.id_ << "\n";
+      sb << "uptime\t" << now - bot_info.start_time_ << "\n";
+      if (!parameters_->stats_hide_token_) {
+        sb << "token\t" << bot_info.token_ << "\n";
+      }
+      sb << "username\t" << bot_info.username_ << "\n";
+      sb << "webhook\t" << bot_info.webhook_ << "\n";
+      sb << "has_custom_certificate\t" << bot_info.has_webhook_certificate_ << "\n";
+      sb << "head_update_id\t" << bot_info.head_update_id_ << "\n";
+      sb << "tail_update_id\t" << bot_info.tail_update_id_ << "\n";
+      sb << "pending_update_count\t" << bot_info.pending_update_count_ << "\n";
+      sb << "webhook_max_connections\t" << bot_info.webhook_max_connections_ << "\n";
 
-    auto stats = client_info->stat_.as_vector(now);
-    for (auto &stat : stats) {
-      if (stat.key_ == "update_count" || stat.key_ == "request_count") {
-        sb << stat.key_ << "/sec\t" << stat.value_ << "\n";
+      auto stats = client_info->stat_.as_vector(now);
+      for (auto &stat : stats) {
+        if (stat.key_ == "update_count" || stat.key_ == "request_count") {
+          sb << stat.key_ << "/sec\t" << stat.value_ << "\n";
+        }
       }
     }
 
@@ -317,7 +349,7 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
     }
   }
   // ignore sb overflow
-  promise.set_value(td::BufferSlice(sb.as_cslice()));
+  promise.set_value(td::BufferSlice(jb.string_builder().as_cslice()));
 }
 
 td::int64 ClientManager::get_tqueue_id(td::int64 user_id, bool is_test_dc) {

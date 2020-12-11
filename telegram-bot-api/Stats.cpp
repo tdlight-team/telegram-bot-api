@@ -72,6 +72,20 @@ td::vector<StatItem> ServerCpuStat::as_vector(double now) {
   return res;
 }
 
+td::vector<td::vector<StatItem>> ServerCpuStat::as_vector_vector(double now) {
+  std::lock_guard<std::mutex> guard(mutex_);
+
+  td::vector<td::vector<StatItem>> res;
+  auto first = stat_[0].get_stat(now).as_vector();
+  auto first_size = first.size();
+  for (std::size_t i = 1; i < SIZE; i++) {
+    auto other = stat_[i].get_stat(now).as_vector();
+    CHECK(other.size() == first_size);
+    res.push_back(other);
+  }
+  return res;
+}
+
 constexpr int ServerCpuStat::DURATIONS[SIZE];
 constexpr const char *ServerCpuStat::DESCR[SIZE];
 
@@ -148,6 +162,7 @@ td::string BotStatActor::get_description() const {
   }
   return res;
 }
+
 
 bool BotStatActor::is_active(double now) const {
   return last_activity_timestamp_ > now - 86400;

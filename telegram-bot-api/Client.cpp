@@ -8034,27 +8034,6 @@ class Client::JsonUpdates : public Jsonable {
   td::Span<td::TQueue::Event> updates_;
 };
 
-class Client::JsonStats : public Jsonable {
- public:
-  explicit JsonStats(td::Span<td::TQueue::Event> updates) : updates_(updates) {
-  }
-  void store(JsonValueScope *scope) const {
-    auto array = scope->enter_array();
-    int left_len = 1 << 22;
-    for (auto &update : updates_) {
-      left_len -= 50 + td::narrow_cast<int>(update.data.size());
-      if (left_len <= 0) {
-        break;
-      }
-      array << JsonUpdate(update.id.value(), update.data);
-    }
-  }
-
- private:
-  td::Span<td::TQueue::Event> updates_;
-};
-
-
 void Client::do_get_updates(int32 offset, int32 limit, int32 timeout, PromisedQueryPtr query) {
   auto &tqueue = parameters_->shared_data_->tqueue_;
   LOG(DEBUG) << "Get updates with offset = " << offset << ", limit = " << limit << " and timeout = " << timeout;
