@@ -1,5 +1,5 @@
 //
-// Copyright Aliaksei Levin (levlam@telegram.org), Arseny Smirnov (arseny30@gmail.com) 2014-2020
+// Copyright Aliaksei Levin (levlam@telegram.org), Arseny Smirnov (arseny30@gmail.com) 2014-2020, Luckydonald (tdlight-telegram-bot-api+code@luckydonald.de) 2020
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -290,7 +290,7 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
     sb << "\n";
     sb << "id\t" << bot_info.id_ << "\n";
     sb << "uptime\t" << now - bot_info.start_time_ << "\n";
-    if (!parameters_->stats_hide_token_) {
+    if (!parameters_->stats_hide_sensible_data_) {
       sb << "token\t" << bot_info.token_ << "\n";
     }
     sb << "username\t" << bot_info.username_ << "\n";
