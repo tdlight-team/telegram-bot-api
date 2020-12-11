@@ -323,7 +323,15 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
   }
 
   if(as_json) {
-    jb_root("bots", JsonStatsBots(&top_bot_ids));
+    td::vector<JsonStatsBotAdvanced> bots;
+    for (std::pair<td::int64, td::uint64>  top_bot_id : top_bot_ids) {
+      auto client_info = clients_.get(top_bot_id.second);
+      CHECK(client_info);
+      ServerBotInfo bot_info = client_info->client_->get_actor_unsafe()->get_bot_info();
+      JsonStatsBotAdvanced bot(&top_bot_id, &bot_info, parameters_->stats_hide_token_);
+      bots.push_back(bot);
+    }
+    jb_root("bots", JsonStatsBots(&bots, false && bots.size() > 100));
   } else {
   for (auto top_bot_id : top_bot_ids) {
       auto *client_info = clients_.get(top_bot_id.second);

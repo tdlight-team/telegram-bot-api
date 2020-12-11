@@ -142,24 +142,61 @@ class JsonStatsBot : public td::Jsonable {
     object("internal_id", td::JsonLong(score_id_pair_->second));
   }
 
- private:
+ protected:
   const std::pair<td::int64, td::uint64> *score_id_pair_;
+};
+
+class JsonStatsBotAdvanced : public JsonStatsBot {
+ public:
+  JsonStatsBotAdvanced(
+      const std::pair<td::int64, td::uint64> *score_id_pair,
+      const ServerBotInfo *bot,
+      const bool hide_sensible_data
+    ) :
+      JsonStatsBot(score_id_pair), bot_(bot), hide_sensible_data_(hide_sensible_data) {
+  }
+  void store(td::JsonValueScope *scope) const {
+    auto object = scope->enter_object();
+    object("id", td::JsonRaw(bot_->id_));
+    //object("uptime", now - bot_->start_time_);
+    object("score", td::JsonLong(score_id_pair_->first));
+    object("internal_id", td::JsonLong(score_id_pair_->second));
+    if (!hide_sensible_data_) {
+      object("token", bot_->token_);
+    }
+    object("username", bot_->username_);
+    object("webhook", bot_->webhook_);
+    object("has_custom_certificate", td::JsonBool(bot_->has_webhook_certificate_));
+    object("head_update_id", td::JsonInt(bot_->head_update_id_));
+    object("tail_update_id", td::JsonInt(bot_->tail_update_id_));
+    object("pending_update_count", td::narrow_cast<td::int32>(bot_->pending_update_count_));
+    object("webhook_max_connections", td::JsonInt(bot_->webhook_max_connections_));
+  }
+ private:
+  const ServerBotInfo *bot_;
+  const bool hide_sensible_data_;
 };
 
 
 class JsonStatsBots : public td::Jsonable {
  public:
-  JsonStatsBots(std::multimap<td::int64, td::uint64> *score_id_map): score_id_map_(score_id_map) {
+  JsonStatsBots(const td::vector<JsonStatsBotAdvanced> *bots, bool no_metadata) : bots_(bots), no_metadata_(no_metadata) {
   }
   void store(td::JsonValueScope *scope) const {
     auto array = scope->enter_array();
-    for (const std::pair<td::int64, td::uint64> score_id_pair: *score_id_map_) {
-      array << JsonStatsBot(&score_id_pair);
+    if (no_metadata_) {
+      for (const JsonStatsBotAdvanced &bot: *bots_) {
+        array << (JsonStatsBot&)bot;
+      }
+    } else {
+      for (const JsonStatsBotAdvanced &bot: *bots_) {
+        array << bot;
+      }
     }
   }
  private:
-  const std::multimap<td::int64, td::uint64> *score_id_map_;
+  const td::vector<JsonStatsBotAdvanced> *bots_;
+  bool no_metadata_;
 };
-
 
 }  // namespace telegram_bot_api
