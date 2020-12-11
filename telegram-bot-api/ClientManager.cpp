@@ -331,7 +331,7 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
       JsonStatsBotAdvanced bot(&top_bot_id, &bot_info, parameters_->stats_hide_sensible_data_);
       bots.push_back(bot);
     }
-    jb_root("bots", JsonStatsBots(&bots, false && bots.size() > 100));
+    jb_root("bots", JsonStatsBots(&bots, bots.size() > 100));
   } else {
   for (auto top_bot_id : top_bot_ids) {
       auto *client_info = clients_.get(top_bot_id.second);
