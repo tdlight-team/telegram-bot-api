@@ -214,6 +214,10 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
   td::JsonBuilder jb(td::StringBuilder(buf.as_slice(), true), -1);
   td::StringBuilder sb = std::move(jb.string_builder());
   auto jb_root = jb.enter_object();
+  if (!as_json) {
+    jb_root.leave();
+    sb.clear();
+  }
 
   td::Slice id_filter;
   for (auto &arg : args) {

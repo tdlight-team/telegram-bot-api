@@ -72,7 +72,7 @@ td::vector<StatItem> ServerCpuStat::as_vector(double now) {
   return res;
 }
 
-td::vector<td::vector<StatItem>> ServerCpuStat::as_vector_vector(double now) {
+td::vector<td::vector<StatItem>> ServerCpuStat::as_json_ready_vector(double now) {
   std::lock_guard<std::mutex> guard(mutex_);
 
   td::vector<td::vector<StatItem>> res;
@@ -153,6 +153,23 @@ td::vector<StatItem> BotStatActor::as_vector(double now) {
   }
   return res;
 }
+
+/*td::vector<StatItem> BotStatActor::as_jsonable_vector(double now) {
+  auto first_sd = stat_[0].stat_duration(now);
+  first_sd.first.normalize(first_sd.second);
+  td::vector<StatItem> res = first_sd.first.as_vector();
+  for (std::size_t i = 1; i < SIZE; i++) {
+    auto next_sd = stat_[i].stat_duration(now);
+    next_sd.first.normalize(next_sd.second);
+    auto other = next_sd.first.as_vector();
+    CHECK(other.size() == res.size());
+    for (size_t j = 0; j < res.size(); j++) {
+      res[j].value_ += "\t";
+      res[j].value_ += other[j].value_;
+    }
+  }
+  return res;
+}*/
 
 td::string BotStatActor::get_description() const {
   td::string res = "DURATION";
