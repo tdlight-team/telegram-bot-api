@@ -97,6 +97,9 @@ Allow http connection in non-local mode
 #### Executable parameter `max-batch-operations`
 maximum number of batch operations (default 10000)
 
+##### Executable parameter `--hide-sensible-data`
+Makes the stats page (if enabled) hide the bot token and the webhook url to no leak user secrets, when served publicly.
+
 <a name="modified-features"></a>
 ### Modified features
 
