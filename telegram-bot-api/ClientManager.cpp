@@ -209,7 +209,6 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
     promise.set_value(td::BufferSlice("Closing"));
     return;
   }
-  as_json = true;
   size_t buf_size = 1 << 18;
   auto buf = td::StackAllocator::alloc(buf_size);
   td::JsonBuilder jb(td::StringBuilder(buf.as_slice(), true), -1);

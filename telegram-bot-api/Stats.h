@@ -61,7 +61,7 @@ class ServerCpuStat {
   td::string get_description() const;
 
   td::vector<StatItem> as_vector(double now);
-  td::vector<td::vector<StatItem>> as_vector_vector(double now);
+  td::vector<td::vector<StatItem>> as_json_ready_vector(double now);
 
  private:
   static constexpr std::size_t SIZE = 4;
