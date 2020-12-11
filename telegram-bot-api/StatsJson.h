@@ -28,6 +28,7 @@
 #include "td/utils/Slice.h"
 #include "td/utils/Status.h"
 #include "td/utils/VectorQueue.h"
+#include "td/utils/utf8.h"
 
 #include <atomic>
 #include <functional>
@@ -165,7 +166,16 @@ class JsonStatsBotAdvanced : public JsonStatsBot {
       object("token", bot_->token_);
     }
     object("username", bot_->username_);
-    object("webhook", bot_->webhook_);
+    td::CSlice url = bot_->webhook_;
+    object("webhook_set", td::JsonBool(!url.empty()));
+    if (!hide_sensible_data_) {
+      if (td::check_utf8(url)) {
+        object("webhook_url", url);
+      } else {
+        object("webhook_url", td::JsonRawString(url));
+      }
+    }
+
     object("has_custom_certificate", td::JsonBool(bot_->has_webhook_certificate_));
     object("head_update_id", td::JsonInt(bot_->head_update_id_));
     object("tail_update_id", td::JsonInt(bot_->tail_update_id_));
