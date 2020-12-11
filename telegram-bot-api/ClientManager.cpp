@@ -297,7 +297,7 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
 
     ServerCpuStat::update(td::Time::now());
     if(as_json) {
-      auto cpu_stats = ServerCpuStat::instance().as_vector_vector(td::Time::now());
+      auto cpu_stats = ServerCpuStat::instance().as_json_ready_vector(td::Time::now());
       jb_root("cpu", JsonStatsCpu(&cpu_stats));
     } else {
       auto cpu_stats = ServerCpuStat::instance().as_vector(td::Time::now());
