@@ -87,7 +87,7 @@ class JsonStatsMem : public td::Jsonable {
 class JsonStatsCpuItem : public td::Jsonable {
  public:
   JsonStatsCpuItem()
-      : total_cpu_("<unknown>"), user_cpu_("<unknown>"), system_cpu_("<unknown>") {
+      : total_cpu_("unset"), user_cpu_("unset"), system_cpu_("unset") {
   }
   JsonStatsCpuItem(const td::string total_cpu, const td::string user_cpu, const td::string system_cpu)
   : total_cpu_(total_cpu), user_cpu_(user_cpu), system_cpu_(system_cpu) {

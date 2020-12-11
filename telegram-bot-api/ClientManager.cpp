@@ -288,7 +288,11 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
         sb << "vm_peak\t" << td::format::as_size(mem_stat.virtual_size_peak_) << "\n";
       }
     } else {
-      LOG(INFO) << "Failed to get memory statistics: " << r_mem_stat.error();
+      if(as_json) {
+        jb_root("memory", td::JsonNull());
+      } else {
+        LOG(INFO) << "Failed to get memory statistics: " << r_mem_stat.error();
+      }
     }
 
     ServerCpuStat::update(td::Time::now());
