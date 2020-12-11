@@ -4420,6 +4420,7 @@ void Client::on_closed() {
 
   if (logging_out_) {
     parameters_->shared_data_->webhook_db_->erase(bot_token_with_dc_);
+    parameters_->shared_data_->user_db_->erase(bot_token_with_dc_);
 
     class RmWorker : public td::Actor {
      public:
