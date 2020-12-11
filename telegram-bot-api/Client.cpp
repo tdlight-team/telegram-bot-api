@@ -2376,7 +2376,7 @@ class Client::TdOnAuthorizationQueryCallback : public TdQueryCallback {
                  std::move(query_));
       LOG(WARNING) << "Logging out due to " << td::oneline(to_string(error));
       client_->log_out();
-    } else if (was_ready) {
+    } else {
       answer_query(td::JsonTrue(), std::move(query_));
       client_->on_update_authorization_state();
     }
