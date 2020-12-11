@@ -294,7 +294,9 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
     sb << "\n";
     sb << "id\t" << bot_info.id_ << "\n";
     sb << "uptime\t" << now - bot_info.start_time_ << "\n";
-    // sb << "token\t" << bot_info.token_ << "\n";
+    if (!parameters_->stats_hide_token_) {
+      sb << "token\t" << bot_info.token_ << "\n";
+    }
     sb << "username\t" << bot_info.username_ << "\n";
     sb << "webhook\t" << bot_info.webhook_ << "\n";
     sb << "has_custom_certificate\t" << bot_info.has_webhook_certificate_ << "\n";
