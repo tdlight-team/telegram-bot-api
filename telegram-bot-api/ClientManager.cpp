@@ -82,7 +82,7 @@ void ClientManager::send(PromisedQueryPtr query) {
   }
 
   auto bot_token_with_dc = PSTRING() << query->token() << (query->is_test_dc() ? ":T" : "");
-  if (parameters_->shared_data_->user_db_->get(bot_token_with_dc).empty() == query->is_user()) {
+  if (parameters_->shared_data_->user_db_->isset(bot_token_with_dc) != query->is_user()) {
     return fail_query(400, "Bad Request: Please use the correct api endpoint for bots or users", std::move(query));
   }
 
@@ -378,7 +378,7 @@ void ClientManager::start_up() {
       continue;
     }
 
-    auto query = get_webhook_restore_query(key_value.first, user_db.get(key_value.first).empty(), key_value.second, parameters_->shared_data_);
+    auto query = get_webhook_restore_query(key_value.first, user_db.isset(key_value.first), key_value.second, parameters_->shared_data_);
     send_closure_later(actor_id(this), &ClientManager::send, std::move(query));
   }
 
