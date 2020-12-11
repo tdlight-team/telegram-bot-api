@@ -103,6 +103,20 @@ Allow http connection in non-local mode
 ##### Flag `--max-batch-operations=<number>`
 maximum number of batch operations (default 10000)
 
+#### Existing Command Line Parameters
+Which are not properly documented, so they are written down here.
+
+##### Flag `-v<number>`/`--verbose=<number>`
+Verbosity of logging.
+The [loglevels](https://github.com/tdlib/td/blob/eb80924dad30af4e6d8385d058bb7e847174df5e/tdutils/td/utils/logging.h#L103-L109) are
+- `0`: Only fatal errors (least noisy)
+- `1`: All errors
+- `2`: Warnings, too
+- `3`: Infos
+- `4`: Debug output (very spammy)
+- `1024`: Also the stuff which is considered to "never" appear (as of writing there's no such stuff).
+_For Docker containers, `$TELEGRAM_VERBOSITY` can be set._
+
 <a name="modified-features"></a>
 #### Modified features
 
