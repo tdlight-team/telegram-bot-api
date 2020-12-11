@@ -14,8 +14,8 @@ Please note that only TDLight-specific issues are suitable for this repository.
 ## Table of Contents
 - [TDLight features](#tdlight-features)
     - [Added features](#added-features)
-      - [Added API Commands](#added-api-commands)
-      - [Added Executable Parameters](#added-executable-parameters)
+      - [Added API Methods](#added-api-methods)
+      - [Added Command Line Parameters](#added-command-line-parameters)
     - [Modified features](#modified-features)
 - [Installation](#installation)
 - [Dependencies](#dependencies)
@@ -34,12 +34,12 @@ Please note that only TDLight-specific issues are suitable for this repository.
 #### TDLib replaced with TDLight
 [TDLight](https://github.com/tdlight-team/tdlight) provides constant memory usage, unlike tdlib that must be restarted to reduce the heap size.
 
-<a name="added-api-commands"></a>
-#### Added API Commands
-##### Command `optimize_memory`
+<a name="added-api-methods"></a>
+#### Added API Methods
+##### Method `optimize_memory`
 Calling `optimize_memory` will remove old data from the in-memory cache and give the freed memory back to the os
 
-##### Command `getMessageInfo`
+##### Method `getMessageInfo`
 Get information about a message
 ###### Parameters
 - `chat_id` Message chat id
@@ -47,7 +47,7 @@ Get information about a message
 ###### Returns `message`
 
  Document the following methods:
-##### Command `getParticipants`
+##### Method `getParticipants`
 Get the member list of a supergroup or channel
 ###### Parameters
 - `chat_id` Chat id
@@ -58,7 +58,7 @@ Get the member list of a supergroup or channel
 
 ###### Returns `ChatMember`
 
-##### Command `deleteMessages`
+##### Method `deleteMessages`
 Delete all the messages with message_id in range between `start` and `end`.  
 The `start` parameter MUST be less than the `end` parameter  
 Both `start` and `end` must be positive non zero numbers  
@@ -92,21 +92,21 @@ Ping delay in seconds represented as string.
 ##### Returns `(todo)`
 -->
 
-<a name="added-executable-parameters"></a>
-#### Added Executable Parameters
-##### Executable flag `--relative`
+<a name="added-command-line-parameters"></a>
+#### Added Command Line Parameters
+##### Flag `--relative`
 If enabled, allow only relative paths for files in local mode.
 
-##### Executable flag `--insecure`
+##### Flag `--insecure`
 Allow http connection in non-local mode
 
-##### Executable parameter `max-batch-operations=<number>`
+##### Flag `--max-batch-operations=<number>`
 maximum number of batch operations (default 10000)
 
 <a name="modified-features"></a>
 #### Modified features
 
-##### Command `getChat`
+##### Method `getChat`
 The command `getChat` will also try to resolve the username online, if it can't be found locally
 
 ##### Object `Message`
