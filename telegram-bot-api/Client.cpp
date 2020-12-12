@@ -302,6 +302,7 @@ bool Client::init_methods() {
   methods_.emplace("getcommonchats", &Client::process_get_common_chats_query);
   methods_.emplace("getinactivechats", &Client::process_get_inactive_chats_query);
   methods_.emplace("getnearbychats", &Client::process_get_nearby_chats_query);
+  methods_.emplace("searchpublicchats", &Client::process_search_public_chats_query);
   methods_.emplace("votepoll", &Client::process_set_poll_answer_query);
   methods_.emplace("joinchat", &Client::process_join_chat_query);
 
@@ -7868,6 +7869,15 @@ td::Status Client::process_get_nearby_chats_query(PromisedQueryPtr &query) {
 
   send_request(make_object<td_api::searchChatsNearby>(std::move(location)),
                std::make_unique<TdOnGetChatsNearbyCallback>(this, std::move(query)));
+  return Status::OK();
+}
+
+td::Status Client::process_search_public_chats_query(PromisedQueryPtr &query) {
+  CHECK_IS_USER();
+  auto query_ = query->arg("query");
+
+  send_request(make_object<td_api::searchPublicChats>(query_.str()),
+               std::make_unique<TdOnGetChatsCallback>(this, std::move(query)));
   return Status::OK();
 }
 
