@@ -155,14 +155,13 @@ td::vector<StatItem> BotStatActor::as_vector(double now) {
 }
 
 td::vector<ServerBotStat> BotStatActor::as_json_ready_vector(double now) {
-  std::pair<ServerBotStat, double> first_sd;
-  first_sd = stat_[0].stat_duration(now);
+  std::pair<ServerBotStat, double> first_sd = stat_[0].stat_duration(now);
   first_sd.first.normalize(first_sd.second);
   td::vector<ServerBotStat> res;
-  for (std::size_t i = 0; i < SIZE; i++) {
-    auto next_sd = stat_[i].stat_duration(now);
+  for (auto & single_stat : stat_) {
+    auto next_sd = single_stat.stat_duration(now);
     next_sd.first.normalize(next_sd.second);
-    res.push_back(std::move(next_sd.first));
+    res.push_back(next_sd.first);
   }
   return res;
 }
