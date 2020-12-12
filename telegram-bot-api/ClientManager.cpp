@@ -217,6 +217,8 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
   if (!as_json) {
     jb_root.leave();
     sb.clear();
+  } else {
+    jb_root("⚠️ WARNING", "The json representation is still a work in progress and will be changed later!");
   }
 
   td::Slice id_filter;
@@ -337,7 +339,7 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
     }
     jb_root("bots", JsonStatsBots(&bots, bots.size() > 100));
   } else {
-  for (auto top_bot_id : top_bot_ids) {
+    for (auto top_bot_id : top_bot_ids) {
       auto *client_info = clients_.get(top_bot_id.second);
       CHECK(client_info);
       auto bot_info = client_info->client_->get_actor_unsafe()->get_bot_info();
