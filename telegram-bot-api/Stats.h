@@ -182,6 +182,7 @@ class BotStatActor final : public td::Actor {
   td::vector<StatItem> as_vector(double now);
   td::vector<ServerBotStat> as_json_ready_vector(double now);
   td::string get_description() const;
+  td::vector<td::string> get_jsonable_description() const;
 
   bool is_active(double now) const;
 

@@ -174,6 +174,14 @@ td::string BotStatActor::get_description() const {
   }
   return res;
 }
+td::vector<td::string> BotStatActor::get_jsonable_description() const {
+  td::vector<td::string> strings;
+  strings.push_back("duration");
+  for (auto &descr : DESCR) {
+    strings.push_back(descr);
+  }
+  return strings;
+}
 
 
 bool BotStatActor::is_active(double now) const {
