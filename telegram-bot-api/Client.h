@@ -513,6 +513,7 @@ class Client : public WebhookActor::Callback {
 
   //custom user methods
   Status process_get_common_chats_query(PromisedQueryPtr &query);
+  Status process_get_inactive_chats_query(PromisedQueryPtr &query);
 
   //custom auth methods
   void process_authcode_query(PromisedQueryPtr &query);

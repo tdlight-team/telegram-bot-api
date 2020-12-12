@@ -298,6 +298,7 @@ bool Client::init_methods() {
 
   //custom user methods
   methods_.emplace("getcommonchats", &Client::process_get_common_chats_query);
+  methods_.emplace("getinactivechats", &Client::process_get_inactive_chats_query);
 
   return true;
 }
@@ -7724,6 +7725,14 @@ td::Status Client::process_get_common_chats_query(PromisedQueryPtr &query) {
   TRY_RESULT(user_id, get_user_id(query.get()));
 
   send_request(make_object<td_api::getGroupsInCommon>(user_id, 0, 100),
+               std::make_unique<TdOnGetChatsCallback>(this, std::move(query)));
+  return Status::OK();
+}
+
+td::Status Client::process_get_inactive_chats_query(PromisedQueryPtr &query) {
+  CHECK_IS_USER();
+
+  send_request(make_object<td_api::getInactiveSupergroupChats>(),
                std::make_unique<TdOnGetChatsCallback>(this, std::move(query)));
   return Status::OK();
 }
