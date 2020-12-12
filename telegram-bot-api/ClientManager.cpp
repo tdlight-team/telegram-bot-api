@@ -282,7 +282,7 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
     if (r_mem_stat.is_ok()) {
       auto mem_stat = r_mem_stat.move_as_ok();
       if(as_json) {
-        jb_root("memory", JsonStatsMem(&mem_stat));
+        jb_root("memory", JsonStatsMem(std::move(mem_stat)));
       } else {
         sb << "rss\t" << td::format::as_size(mem_stat.resident_size_) << "\n";
         sb << "vm\t" << td::format::as_size(mem_stat.virtual_size_) << "\n";
@@ -300,7 +300,7 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
     ServerCpuStat::update(td::Time::now());
     if(as_json) {
       auto cpu_stats = ServerCpuStat::instance().as_json_ready_vector(td::Time::now());
-      jb_root("cpu", JsonStatsCpu(&cpu_stats));
+      jb_root("cpu", JsonStatsCpu(std::move(cpu_stats)));
     } else {
       auto cpu_stats = ServerCpuStat::instance().as_vector(td::Time::now());
       for (auto &stat : cpu_stats) {
@@ -334,10 +334,10 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
       auto client_info = clients_.get(top_bot_id.second);
       CHECK(client_info);
       ServerBotInfo bot_info = client_info->client_->get_actor_unsafe()->get_bot_info();
-      JsonStatsBotAdvanced bot(&top_bot_id, &bot_info, parameters_->stats_hide_sensible_data_);
+      JsonStatsBotAdvanced bot(top_bot_id, bot_info, parameters_->stats_hide_sensible_data_);
       bots.push_back(bot);
     }
-    jb_root("bots", JsonStatsBots(&bots, bots.size() > 100));
+    jb_root("bots", JsonStatsBots(std::move(bots), bots.size() > 100));
   } else {
     for (auto top_bot_id : top_bot_ids) {
       auto *client_info = clients_.get(top_bot_id.second);
