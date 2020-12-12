@@ -154,7 +154,7 @@ td::vector<StatItem> BotStatActor::as_vector(double now) {
   return res;
 }
 
-td::vector<ServerBotStat> BotStatActor::as_jsonable_vector(double now) {
+td::vector<ServerBotStat> BotStatActor::as_json_ready_vector(double now) {
   std::pair<ServerBotStat, double> first_sd;
   first_sd = stat_[0].stat_duration(now);
   first_sd.first.normalize(first_sd.second);

@@ -334,7 +334,7 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
       auto client_info = clients_.get(top_bot_id.second);
       CHECK(client_info);
       ServerBotInfo bot_info = client_info->client_->get_actor_unsafe()->get_bot_info();
-      auto stats = client_info->stat_.as_jsonable_vector(now);
+      auto stats = client_info->stat_.as_json_ready_vector(now);
       JsonStatsBotAdvanced bot(std::move(top_bot_id), std::move(bot_info), std::move(stats), parameters_->stats_hide_sensible_data_);
       bots.push_back(bot);
     }
