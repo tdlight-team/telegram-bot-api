@@ -196,7 +196,7 @@ class JsonStatsBots : public td::Jsonable {
     auto array = scope->enter_array();
     if (no_metadata_) {
       for (const JsonStatsBotAdvanced &bot: *bots_) {
-        array << (JsonStatsBot&)bot;
+        array << static_cast<const JsonStatsBot&>(bot);
       }
     } else {
       for (const JsonStatsBotAdvanced &bot: *bots_) {
