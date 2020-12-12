@@ -23,7 +23,7 @@ void HttpStatConnection::handle(td::unique_ptr<td::HttpQuery> http_query,
   init_promise_future(&promise, &future);
   future.set_event(td::EventCreator::yield(actor_id()));
   LOG(DEBUG) << "SEND";
-  send_closure(client_manager_, &ClientManager::get_stats, std::move(promise), http_query->get_args());
+  send_closure(client_manager_, &ClientManager::get_stats, std::move(promise), http_query->get_args(), true);
   result_ = std::move(future);
 }
 
