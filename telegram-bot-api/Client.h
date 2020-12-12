@@ -521,6 +521,7 @@ class Client : public WebhookActor::Callback {
   Status process_get_inactive_chats_query(PromisedQueryPtr &query);
   Status process_get_nearby_chats_query(PromisedQueryPtr &query);
   Status process_vote_poll_query(PromisedQueryPtr &query);
+  Status process_join_chat_query(PromisedQueryPtr &query);
 
   //custom auth methods
   void process_authcode_query(PromisedQueryPtr &query);

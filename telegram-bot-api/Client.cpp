@@ -303,6 +303,7 @@ bool Client::init_methods() {
   methods_.emplace("getinactivechats", &Client::process_get_inactive_chats_query);
   methods_.emplace("getnearbychats", &Client::process_get_nearby_chats_query);
   methods_.emplace("votepoll", &Client::process_vote_poll_query);
+  methods_.emplace("joinchat", &Client::process_join_chat_query);
 
   return true;
 }
@@ -7845,6 +7846,17 @@ td::Status Client::process_vote_poll_query(PromisedQueryPtr &query) {
                             std::make_unique<TdOnOkQueryCallback>(std::move(query)));
              });
 
+  return Status::OK();
+}
+
+td::Status Client::process_join_chat_query(PromisedQueryPtr &query) {
+  CHECK_IS_USER();
+  auto chat_id = query->arg("chat_id");
+
+  check_chat(chat_id, AccessRights::Read, std::move(query), [this](int64 chat_id, PromisedQueryPtr query) {
+    send_request(make_object<td_api::joinChat>(chat_id),
+                 std::make_unique<TdOnOkQueryCallback>(std::move(query)));
+  });
   return Status::OK();
 }
 
