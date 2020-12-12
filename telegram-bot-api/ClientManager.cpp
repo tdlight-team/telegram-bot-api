@@ -202,8 +202,7 @@ bool ClientManager::check_flood_limits(PromisedQueryPtr &query, bool is_user_log
 }
 
 void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
-                              td::vector<std::pair<td::string, td::string>> args,
-                              bool as_json) {
+                              td::vector<std::pair<td::string, td::string>> args) {
   if (close_flag_) {
     promise.set_value(td::BufferSlice("Closing"));
     return;
