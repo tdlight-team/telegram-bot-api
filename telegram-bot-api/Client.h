@@ -101,6 +101,7 @@ class Client : public WebhookActor::Callback {
   class JsonChatPhotoInfo;
   class JsonChatLocation;
   class JsonChat;
+  class JsonChats;
   class JsonMessageSender;
   class JsonAnimation;
   class JsonAudio;
@@ -191,6 +192,7 @@ class Client : public WebhookActor::Callback {
 
   //start custom callbacks
   class TdOnPingCallback;
+  class TdOnGetChatsCallback;
   //end custom callbacks
 
   void on_get_reply_message(int64 chat_id, object_ptr<td_api::message> reply_to_message);
@@ -508,6 +510,9 @@ class Client : public WebhookActor::Callback {
   Status process_delete_messages_query(PromisedQueryPtr &query);
   Status process_toggle_group_invites_query(PromisedQueryPtr &query);
   Status process_ping_query(PromisedQueryPtr &query);
+
+  //custom user methods
+  Status process_get_common_chats_query(PromisedQueryPtr &query);
 
   //custom auth methods
   void process_authcode_query(PromisedQueryPtr &query);

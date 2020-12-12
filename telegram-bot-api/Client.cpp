@@ -296,6 +296,8 @@ bool Client::init_methods() {
   methods_.emplace("togglegroupinvites", &Client::process_toggle_group_invites_query);
   methods_.emplace("ping", &Client::process_ping_query);
 
+  //custom user methods
+  methods_.emplace("getcommonchats", &Client::process_get_common_chats_query);
 
   return true;
 }
@@ -743,6 +745,23 @@ class Client::JsonChat : public Jsonable {
   bool is_full_;
   const Client *client_;
   int64 pinned_message_id_;
+};
+
+class Client::JsonChats : public Jsonable {
+ public:
+  JsonChats(const object_ptr<td_api::chats> &chats, const Client *client)
+      : chats_(chats), client_(client) {
+  }
+  void store(JsonValueScope *scope) const {
+    auto array = scope->enter_array();
+    for (auto &chat : chats_->chat_ids_) {
+      array << JsonChat(chat, false, client_);
+    }
+  }
+
+ private:
+  const object_ptr<td_api::chats> &chats_;
+  const Client *client_;
 };
 
 class Client::JsonMessageSender : public Jsonable {
@@ -3325,6 +3344,26 @@ class Client::TdOnPingCallback : public TdQueryCallback {
   }
 
  private:
+  PromisedQueryPtr query_;
+};
+
+class Client::TdOnGetChatsCallback : public TdQueryCallback {
+ public:
+  explicit TdOnGetChatsCallback(Client *client, PromisedQueryPtr query) : client_(client), query_(std::move(query)) {
+  }
+
+  void on_result(object_ptr<td_api::Object> result) override {
+    if (result->get_id() == td_api::error::ID) {
+      return fail_query_with_error(std::move(query_), move_object_as<td_api::error>(result));
+    }
+    CHECK(result->get_id() == td_api::chats::ID);
+
+    auto chats = move_object_as<td_api::chats>(result);
+    answer_query(JsonChats(chats, client_), std::move(query_));
+  }
+
+ private:
+  const Client *client_;
   PromisedQueryPtr query_;
 };
 
@@ -7678,6 +7717,18 @@ td::Status Client::process_ping_query(PromisedQueryPtr &query) {
 }
 
 //end custom methods impl
+//start custom user methods impl
+
+td::Status Client::process_get_common_chats_query(PromisedQueryPtr &query) {
+  CHECK_IS_USER();
+  TRY_RESULT(user_id, get_user_id(query.get()));
+
+  send_request(make_object<td_api::getGroupsInCommon>(user_id, 0, 100),
+               std::make_unique<TdOnGetChatsCallback>(this, std::move(query)));
+  return Status::OK();
+}
+
+//end custom user methods impl
 //start costom auth methods impl
 
 void Client::process_authcode_query(PromisedQueryPtr &query) {
