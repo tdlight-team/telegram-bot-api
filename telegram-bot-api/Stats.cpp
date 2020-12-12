@@ -154,22 +154,18 @@ td::vector<StatItem> BotStatActor::as_vector(double now) {
   return res;
 }
 
-/*td::vector<StatItem> BotStatActor::as_jsonable_vector(double now) {
-  auto first_sd = stat_[0].stat_duration(now);
+td::vector<ServerBotStat> BotStatActor::as_jsonable_vector(double now) {
+  std::pair<ServerBotStat, double> first_sd;
+  first_sd = stat_[0].stat_duration(now);
   first_sd.first.normalize(first_sd.second);
-  td::vector<StatItem> res = first_sd.first.as_vector();
-  for (std::size_t i = 1; i < SIZE; i++) {
+  td::vector<ServerBotStat> res;
+  for (std::size_t i = 0; i < SIZE; i++) {
     auto next_sd = stat_[i].stat_duration(now);
     next_sd.first.normalize(next_sd.second);
-    auto other = next_sd.first.as_vector();
-    CHECK(other.size() == res.size());
-    for (size_t j = 0; j < res.size(); j++) {
-      res[j].value_ += "\t";
-      res[j].value_ += other[j].value_;
-    }
+    res.push_back(std::move(next_sd.first));
   }
   return res;
-}*/
+}
 
 td::string BotStatActor::get_description() const {
   td::string res = "DURATION";
