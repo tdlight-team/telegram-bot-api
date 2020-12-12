@@ -195,6 +195,8 @@ class Client : public WebhookActor::Callback {
   class TdOnPingCallback;
   class TdOnGetChatsCallback;
   class TdOnGetChatsNearbyCallback;
+  class TdOnJoinChatIdCallback;
+  class TdOnJoinChatInviteLinkCallback;
   //end custom callbacks
 
   void on_get_reply_message(int64 chat_id, object_ptr<td_api::message> reply_to_message);
@@ -520,7 +522,7 @@ class Client : public WebhookActor::Callback {
   Status process_get_common_chats_query(PromisedQueryPtr &query);
   Status process_get_inactive_chats_query(PromisedQueryPtr &query);
   Status process_get_nearby_chats_query(PromisedQueryPtr &query);
-  Status process_vote_poll_query(PromisedQueryPtr &query);
+  Status process_set_poll_answer_query(PromisedQueryPtr &query);
   Status process_join_chat_query(PromisedQueryPtr &query);
 
   //custom auth methods

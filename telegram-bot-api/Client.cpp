@@ -302,7 +302,7 @@ bool Client::init_methods() {
   methods_.emplace("getcommonchats", &Client::process_get_common_chats_query);
   methods_.emplace("getinactivechats", &Client::process_get_inactive_chats_query);
   methods_.emplace("getnearbychats", &Client::process_get_nearby_chats_query);
-  methods_.emplace("votepoll", &Client::process_vote_poll_query);
+  methods_.emplace("votepoll", &Client::process_set_poll_answer_query);
   methods_.emplace("joinchat", &Client::process_join_chat_query);
 
   return true;
@@ -3412,6 +3412,48 @@ class Client::TdOnGetChatsNearbyCallback : public TdQueryCallback {
 
     auto chats_nearby = move_object_as<td_api::chatsNearby>(result);
     answer_query(JsonChatsNearby(chats_nearby, client_), std::move(query_));
+  }
+
+ private:
+  const Client *client_;
+  PromisedQueryPtr query_;
+};
+
+class Client::TdOnJoinChatIdCallback : public TdQueryCallback {
+ public:
+  explicit TdOnJoinChatIdCallback(Client *client, PromisedQueryPtr query, int64 chat_id)
+      : client_(client), query_(std::move(query)), chat_id_(chat_id) {
+  }
+
+  void on_result(object_ptr<td_api::Object> result) override {
+    if (result->get_id() == td_api::error::ID) {
+      return fail_query_with_error(std::move(query_), move_object_as<td_api::error>(result));
+    }
+    CHECK(result->get_id() == td_api::ok::ID);
+
+    answer_query(JsonChat(chat_id_, false, client_), std::move(query_));
+  }
+
+ private:
+  const Client *client_;
+  PromisedQueryPtr query_;
+  int64 chat_id_;
+};
+
+class Client::TdOnJoinChatInviteLinkCallback : public TdQueryCallback {
+ public:
+  explicit TdOnJoinChatInviteLinkCallback(Client *client, PromisedQueryPtr query)
+      : client_(client), query_(std::move(query)) {
+  }
+
+  void on_result(object_ptr<td_api::Object> result) override {
+    if (result->get_id() == td_api::error::ID) {
+      return fail_query_with_error(std::move(query_), move_object_as<td_api::error>(result));
+    }
+    CHECK(result->get_id() == td_api::chat::ID);
+
+    auto chat = move_object_as<td_api::chat>(result);
+    answer_query(JsonChat(chat->id_, false, client_), std::move(query_));
   }
 
  private:
@@ -7829,7 +7871,7 @@ td::Status Client::process_get_nearby_chats_query(PromisedQueryPtr &query) {
   return Status::OK();
 }
 
-td::Status Client::process_vote_poll_query(PromisedQueryPtr &query) {
+td::Status Client::process_set_poll_answer_query(PromisedQueryPtr &query) {
   CHECK_IS_USER();
   auto chat_id_ = query->arg("chat_id");
 
@@ -7852,11 +7894,20 @@ td::Status Client::process_vote_poll_query(PromisedQueryPtr &query) {
 td::Status Client::process_join_chat_query(PromisedQueryPtr &query) {
   CHECK_IS_USER();
   auto chat_id = query->arg("chat_id");
+  auto invite_link = query->arg("invite_link");
 
-  check_chat(chat_id, AccessRights::Read, std::move(query), [this](int64 chat_id, PromisedQueryPtr query) {
-    send_request(make_object<td_api::joinChat>(chat_id),
-                 std::make_unique<TdOnOkQueryCallback>(std::move(query)));
-  });
+  if (!chat_id.empty()) {
+    check_chat(chat_id, AccessRights::Read, std::move(query), [this](int64 chat_id, PromisedQueryPtr query) {
+      send_request(make_object<td_api::joinChat>(chat_id),
+                   std::make_unique<TdOnJoinChatIdCallback>(this, std::move(query), chat_id));
+    });
+  } else if (!invite_link.empty()) {
+    send_request(make_object<td_api::joinChatByInviteLink>(invite_link.str()),
+        std::make_unique<TdOnJoinChatInviteLinkCallback>(this, std::move(query)));
+  } else {
+    fail_query(400, "Bad request: Please specify chat_id or invite_link", std::move(query));
+  }
+
   return Status::OK();
 }
 
