@@ -69,7 +69,7 @@ class JsonStatsSize : public td::Jsonable {
 
 class JsonStatsMem : public td::Jsonable {
  public:
-  explicit JsonStatsMem(const td::MemStat mem_stat) : mem_stat_(std::move(mem_stat)) {
+  explicit JsonStatsMem(const td::MemStat mem_stat) : mem_stat_(mem_stat) {
   }
   void store(td::JsonValueScope *scope) const {
     auto object = scope->enter_object();

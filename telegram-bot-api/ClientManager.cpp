@@ -282,7 +282,7 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
     if (r_mem_stat.is_ok()) {
       auto mem_stat = r_mem_stat.move_as_ok();
       if(as_json) {
-        jb_root("memory", JsonStatsMem(std::move(mem_stat)));
+        jb_root("memory", JsonStatsMem(mem_stat));
       } else {
         sb << "rss\t" << td::format::as_size(mem_stat.resident_size_) << "\n";
         sb << "vm\t" << td::format::as_size(mem_stat.virtual_size_) << "\n";
@@ -337,7 +337,8 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
       JsonStatsBotAdvanced bot(top_bot_id, bot_info, parameters_->stats_hide_sensible_data_);
       bots.push_back(bot);
     }
-    jb_root("bots", JsonStatsBots(std::move(bots), bots.size() > 100));
+    auto bot_count = bots.size();
+    jb_root("bots", JsonStatsBots(std::move(bots), bot_count > 100));
   } else {
     for (auto top_bot_id : top_bot_ids) {
       auto *client_info = clients_.get(top_bot_id.second);
