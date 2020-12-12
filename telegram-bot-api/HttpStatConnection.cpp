@@ -39,7 +39,12 @@ void HttpStatConnection::wakeup() {
   td::HttpHeaderCreator hc;
   hc.init_status_line(200);
   hc.set_keep_alive();
-  hc.set_content_type("application/json");
+  if (!content.empty() && content.data()[0] == '{') {
+    // https://t.me/TDLightChat/1462
+    hc.set_content_type("application/json");
+  } else {
+    hc.set_content_type("text/plain");
+  }
   hc.set_content_size(content.size());
 
   auto r_header = hc.finish();
