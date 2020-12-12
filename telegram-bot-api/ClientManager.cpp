@@ -294,7 +294,7 @@ void ClientManager::get_stats(td::PromiseActor<td::BufferSlice> promise,
     }
     sb << "username\t" << bot_info.username_ << "\n";
     if (!parameters_->stats_hide_sensible_data_) {
-        sb << "webhook\t" << bot_info.webhook_ << "\n";
+      sb << "webhook\t" << bot_info.webhook_ << "\n";
     } else if (bot_info.webhook_.empty()) {
       sb << "webhook disabled" << "\n";
     } else {
