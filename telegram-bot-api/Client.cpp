@@ -33,6 +33,7 @@
 #include "td/utils/utf8.h"
 
 #include <cstdlib>
+#include <climits>
 
 #define CHECK_IS_BOT()                                                     \
   if (is_user_) {                                                          \
@@ -297,8 +298,10 @@ bool Client::init_methods() {
   methods_.emplace("ping", &Client::process_ping_query);
 
   //custom user methods
+  methods_.emplace("getchats", &Client::process_get_chats_query);
   methods_.emplace("getcommonchats", &Client::process_get_common_chats_query);
   methods_.emplace("getinactivechats", &Client::process_get_inactive_chats_query);
+  methods_.emplace("votepoll", &Client::process_vote_poll_query);
 
   return true;
 }
@@ -6002,6 +6005,30 @@ td::Result<td::vector<td::string>> Client::get_poll_options(const Query *query) 
   return std::move(options);
 }
 
+td::Result<td::vector<td::int32>> Client::get_poll_option_ids(const Query *query) {
+  auto input_options = query->arg("option_ids");
+  LOG(INFO) << "Parsing JSON object: " << input_options;
+  auto r_value = json_decode(input_options);
+  if (r_value.is_error()) {
+    LOG(INFO) << "Can't parse JSON object: " << r_value.error();
+    return Status::Error(400, "Can't parse option_ids JSON object");
+  }
+
+  auto value = r_value.move_as_ok();
+  if (value.type() != JsonValue::Type::Array) {
+    return Status::Error(400, "Expected an Array of Integer as options");
+  }
+
+  td::vector<td::int32> options;
+  for (auto &input_option : value.get_array()) {
+    if (input_option.type() != JsonValue::Type::Number) {
+      return Status::Error(400, "Expected an option to be of type Integer");
+    }
+    options.push_back(td::to_integer_safe<td::int32>(input_option.get_number()).move_as_ok());
+  }
+  return std::move(options);
+}
+
 td::int32 Client::get_integer_arg(const Query *query, Slice field_name, int32 default_value, int32 min_value,
                                   int32 max_value) {
   auto s_arg = query->arg(field_name);
@@ -7720,6 +7747,14 @@ td::Status Client::process_ping_query(PromisedQueryPtr &query) {
 //end custom methods impl
 //start custom user methods impl
 
+td::Status Client::process_get_chats_query(PromisedQueryPtr &query) {
+  CHECK_IS_USER();
+  td::int64 offset_chat_id = get_integer_arg(query.get(), "offset_chat_id", 0);
+  send_request(make_object<td_api::getChats>(make_object<td_api::chatListMain>(), LLONG_MAX, offset_chat_id, 100),
+               std::make_unique<TdOnGetChatsCallback>(this, std::move(query)));
+  return Status::OK();
+}
+
 td::Status Client::process_get_common_chats_query(PromisedQueryPtr &query) {
   CHECK_IS_USER();
   TRY_RESULT(user_id, get_user_id(query.get()));
@@ -7734,6 +7769,26 @@ td::Status Client::process_get_inactive_chats_query(PromisedQueryPtr &query) {
 
   send_request(make_object<td_api::getInactiveSupergroupChats>(),
                std::make_unique<TdOnGetChatsCallback>(this, std::move(query)));
+  return Status::OK();
+}
+
+td::Status Client::process_vote_poll_query(PromisedQueryPtr &query) {
+  CHECK_IS_USER();
+  auto chat_id_ = query->arg("chat_id");
+
+  check_chat(chat_id_, AccessRights::Read, std::move(query),
+             [this] (int64 chat_id, PromisedQueryPtr query) {
+               auto r_option_ids = get_poll_option_ids(query.get());
+               if (r_option_ids.is_error()) {
+                 auto error = r_option_ids.move_as_error();
+                 return fail_query(error.code(), error.message(), std::move(query));
+               }
+               auto option_ids = r_option_ids.move_as_ok();
+               auto message_id = get_message_id(query.get());
+               send_request(make_object<td_api::setPollAnswer>(chat_id, message_id, std::move(option_ids)),
+                            std::make_unique<TdOnOkQueryCallback>(std::move(query)));
+             });
+
   return Status::OK();
 }
 

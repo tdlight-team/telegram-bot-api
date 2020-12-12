@@ -409,6 +409,8 @@ class Client : public WebhookActor::Callback {
 
   static td::Result<td::vector<td::string>> get_poll_options(const Query *query);
 
+  static td::Result<td::vector<td::int32>> get_poll_option_ids(const Query *query);
+
   static int32 get_integer_arg(const Query *query, Slice field_name, int32 default_value,
                                int32 min_value = std::numeric_limits<int32>::min(),
                                int32 max_value = std::numeric_limits<int32>::max());
@@ -512,8 +514,10 @@ class Client : public WebhookActor::Callback {
   Status process_ping_query(PromisedQueryPtr &query);
 
   //custom user methods
+  Status process_get_chats_query(PromisedQueryPtr &query);
   Status process_get_common_chats_query(PromisedQueryPtr &query);
   Status process_get_inactive_chats_query(PromisedQueryPtr &query);
+  Status process_vote_poll_query(PromisedQueryPtr &query);
 
   //custom auth methods
   void process_authcode_query(PromisedQueryPtr &query);
