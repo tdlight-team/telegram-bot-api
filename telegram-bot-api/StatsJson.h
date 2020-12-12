@@ -163,7 +163,7 @@ class JsonStatsBotAdvanced : public JsonStatsBot {
     object("score", td::JsonLong(score_id_pair_->first));
     object("internal_id", td::JsonLong(score_id_pair_->second));
     if (!hide_sensible_data_) {
-      object("token", bot_->token_);
+      object("token", td::JsonRaw(bot_->token_));
     }
     object("username", bot_->username_);
     td::CSlice url = bot_->webhook_;
