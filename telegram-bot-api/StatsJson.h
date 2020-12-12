@@ -112,9 +112,9 @@ class JsonStatsCpu : public td::Jsonable {
   }
   void store(td::JsonValueScope *scope) const {
     auto array = scope->enter_array();
-    for (const td::vector<StatItem> &stats : *cpu_stats_) {
+    for (const auto &stats : *cpu_stats_) {
       auto item = JsonStatsCpuItem();
-      for (const auto& stat : stats) {
+      for (const auto &stat : stats) {
         if (stat.key_ == "total_cpu") {
           item.total_cpu_ = stat.value_;
         } else if (stat.key_ == "user_cpu") {
