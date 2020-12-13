@@ -305,6 +305,7 @@ bool Client::init_methods() {
   methods_.emplace("searchpublicchats", &Client::process_search_public_chats_query);
   methods_.emplace("votepoll", &Client::process_set_poll_answer_query);
   methods_.emplace("joinchat", &Client::process_join_chat_query);
+  methods_.emplace("reportchat", &Client::process_report_chat_query);
 
   return true;
 }
@@ -6096,8 +6097,9 @@ td::Result<td::vector<td::string>> Client::get_poll_options(const Query *query) 
   return std::move(options);
 }
 
-td::Result<td::vector<td::int32>> Client::get_poll_option_ids(const Query *query) {
-  auto input_options = query->arg("option_ids");
+template <class T>
+td::Result<td::vector<T>> Client::get_int_array_arg(const Query *query, Slice field_name) {
+  auto input_options = query->arg(field_name);
   LOG(INFO) << "Parsing JSON object: " << input_options;
   auto r_value = json_decode(input_options);
   if (r_value.is_error()) {
@@ -6110,12 +6112,12 @@ td::Result<td::vector<td::int32>> Client::get_poll_option_ids(const Query *query
     return Status::Error(400, "Expected an Array of Integer as options");
   }
 
-  td::vector<td::int32> options;
+  td::vector<T> options;
   for (auto &input_option : value.get_array()) {
     if (input_option.type() != JsonValue::Type::Number) {
       return Status::Error(400, "Expected an option to be of type Integer");
     }
-    options.push_back(td::to_integer_safe<td::int32>(input_option.get_number()).move_as_ok());
+    options.push_back(td::to_integer_safe<T>(input_option.get_number()).move_as_ok());
   }
   return std::move(options);
 }
@@ -6166,6 +6168,29 @@ td::Result<td::int32> Client::get_user_id(const Query *query, Slice field_name) 
     return Status::Error(400, PSLICE() << "Invalid " << field_name << " specified");
   }
   return user_id;
+}
+
+td::Result<td_api::object_ptr<td_api::ChatReportReason>> Client::get_report_reason(const Query *query, Slice field_name) {
+  auto reason = query->arg(field_name);
+  object_ptr<td_api::ChatReportReason> result;
+  if (reason.empty()){
+    return Status::Error(400, "reason is not specified");
+  } else if (reason == "child_abuse") {
+    result =  make_object<td_api::chatReportReasonChildAbuse>();
+  } else if (reason == "copyright") {
+    result = make_object<td_api::chatReportReasonCopyright>();
+  } else if (reason == "pornography") {
+    result = make_object<td_api::chatReportReasonPornography>();
+  } else if (reason == "spam") {
+    result = make_object<td_api::chatReportReasonSpam>();
+  } else if (reason == "unrelated_location") {
+    result = make_object<td_api::chatReportReasonUnrelatedLocation>();
+  } else if (reason == "violence") {
+    result = make_object<td_api::chatReportReasonViolence>();
+  } else {
+    result = make_object<td_api::chatReportReasonCustom>(reason.str());
+  }
+  return std::move(result);
 }
 
 td::int64 Client::extract_yet_unsent_message_query_id(int64 chat_id, int64 message_id,
@@ -7883,16 +7908,11 @@ td::Status Client::process_search_public_chats_query(PromisedQueryPtr &query) {
 
 td::Status Client::process_set_poll_answer_query(PromisedQueryPtr &query) {
   CHECK_IS_USER();
-  auto chat_id_ = query->arg("chat_id");
+  auto chat_id = query->arg("chat_id");
+  TRY_RESULT(option_ids, get_int_array_arg<td::int32>(query.get(), "option_ids"));
 
-  check_chat(chat_id_, AccessRights::Read, std::move(query),
-             [this] (int64 chat_id, PromisedQueryPtr query) {
-               auto r_option_ids = get_poll_option_ids(query.get());
-               if (r_option_ids.is_error()) {
-                 auto error = r_option_ids.move_as_error();
-                 return fail_query(error.code(), error.message(), std::move(query));
-               }
-               auto option_ids = r_option_ids.move_as_ok();
+  check_chat(chat_id, AccessRights::Read, std::move(query),
+             [this, option_ids = std::move(option_ids)](int64 chat_id, PromisedQueryPtr query) mutable {
                auto message_id = get_message_id(query.get());
                send_request(make_object<td_api::setPollAnswer>(chat_id, message_id, std::move(option_ids)),
                             std::make_unique<TdOnOkQueryCallback>(std::move(query)));
@@ -7918,6 +7938,21 @@ td::Status Client::process_join_chat_query(PromisedQueryPtr &query) {
     fail_query(400, "Bad request: Please specify chat_id or invite_link", std::move(query));
   }
 
+  return Status::OK();
+}
+
+td::Status Client::process_report_chat_query(PromisedQueryPtr &query) {
+  CHECK_IS_USER();
+  auto chat_id = query->arg("chat_id");
+  TRY_RESULT(reason, get_report_reason(query.get()));
+  TRY_RESULT(message_ids, get_int_array_arg<td::int64>(query.get(), "message_ids"));
+
+  check_chat(chat_id, AccessRights::Read, std::move(query),
+             [this, reason = std::move(reason), message_ids = std::move(message_ids)](int64 chat_id,
+                                                                                      PromisedQueryPtr query) mutable {
+               send_request(make_object<td_api::reportChat>(chat_id, std::move(reason), std::move(message_ids)),
+                            std::make_unique<TdOnOkQueryCallback>(std::move(query)));
+             });
   return Status::OK();
 }
 
