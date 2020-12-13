@@ -190,13 +190,14 @@ class JsonStatsBotAdvanced : public JsonStatsBot {
   explicit JsonStatsBotAdvanced(const std::pair<td::int64, td::uint64> score_id_pair,
                                 const ServerBotInfo bot,
                                 const td::vector<ServerBotStat> stats,
-                                const bool hide_sensible_data)
-      : JsonStatsBot(score_id_pair), bot_(bot), stats_(stats), hide_sensible_data_(hide_sensible_data) {
+                                const bool hide_sensible_data,
+                                const double now)
+      : JsonStatsBot(score_id_pair), bot_(bot), stats_(stats), hide_sensible_data_(hide_sensible_data), now_(now) {
   }
   void store(td::JsonValueScope *scope) const {
     auto object = scope->enter_object();
     object("id", td::JsonLong(td::to_integer<td::int64>(bot_.id_)));
-    //object("uptime", now - bot_->start_time_);
+    object("uptime", now_ - bot_.start_time_);
     object("score", td::JsonLong(score_id_pair_.first));
     object("internal_id", td::JsonLong(score_id_pair_.second));
     if (!hide_sensible_data_) {
@@ -224,6 +225,7 @@ class JsonStatsBotAdvanced : public JsonStatsBot {
   const ServerBotInfo bot_;
   const td::vector<ServerBotStat> stats_;
   const bool hide_sensible_data_;
+  const double now_;
 };
 
 class JsonStatsBots : public td::Jsonable {
