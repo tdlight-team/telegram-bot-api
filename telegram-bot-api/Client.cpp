@@ -307,6 +307,7 @@ bool Client::init_methods() {
   methods_.emplace("joinchat", &Client::process_join_chat_query);
   methods_.emplace("addchatmembers", &Client::process_add_chat_members_query);
   methods_.emplace("reportchat", &Client::process_report_chat_query);
+  methods_.emplace("createchat", &Client::process_create_chat_query);
 
   return true;
 }
@@ -3443,9 +3444,9 @@ class Client::TdOnJoinChatIdCallback : public TdQueryCallback {
   int64 chat_id_;
 };
 
-class Client::TdOnJoinChatInviteLinkCallback : public TdQueryCallback {
+class Client::TdOnReturnChatCallback : public TdQueryCallback {
  public:
-  explicit TdOnJoinChatInviteLinkCallback(Client *client, PromisedQueryPtr query)
+  explicit TdOnReturnChatCallback(Client *client, PromisedQueryPtr query)
       : client_(client), query_(std::move(query)) {
   }
 
@@ -3482,8 +3483,9 @@ class Client::TdOnAddChatMembersCallback : public TdQueryCallback {
     } else {
       td::int32 user_id = user_ids_.back();
       user_ids_.pop_back();
-      client_->send_request(make_object<td_api::addChatMember>(chat_id_, user_id, 0),
-                            std::make_unique<TdOnAddChatMembersCallback>(client_, std::move(query_), chat_id_, std::move(user_ids_)));
+      client_->send_request(
+          make_object<td_api::addChatMember>(chat_id_, user_id, 0),
+          std::make_unique<TdOnAddChatMembersCallback>(client_, std::move(query_), chat_id_, std::move(user_ids_)));
     }
   }
 
@@ -7966,7 +7968,7 @@ td::Status Client::process_join_chat_query(PromisedQueryPtr &query) {
     });
   } else if (!invite_link.empty()) {
     send_request(make_object<td_api::joinChatByInviteLink>(invite_link.str()),
-                 std::make_unique<TdOnJoinChatInviteLinkCallback>(this, std::move(query)));
+                 std::make_unique<TdOnReturnChatCallback>(this, std::move(query)));
   } else {
     fail_query(400, "Bad request: Please specify chat_id or invite_link", std::move(query));
   }
@@ -8010,6 +8012,25 @@ td::Status Client::process_report_chat_query(PromisedQueryPtr &query) {
                send_request(make_object<td_api::reportChat>(chat_id, std::move(reason), std::move(message_ids)),
                             std::make_unique<TdOnOkQueryCallback>(std::move(query)));
              });
+  return Status::OK();
+}
+
+td::Status Client::process_create_chat_query(PromisedQueryPtr &query) {
+  CHECK_IS_USER();
+  auto chat_type = query->arg("type");
+  auto title = query->arg("title");
+  
+  if (chat_type == "supergroup") {
+    send_request(make_object<td_api::createNewSupergroupChat>(title.str(), false, "", nullptr),
+                 std::make_unique<TdOnReturnChatCallback>(this, std::move(query)));
+  } else if (chat_type == "channel") {
+    send_request(make_object<td_api::createNewSupergroupChat>(title.str(), true, "", nullptr),
+                 std::make_unique<TdOnReturnChatCallback>(this, std::move(query)));
+  } else if (chat_type == "group") {
+    TRY_RESULT(initial_members, get_int_array_arg<td::int32>(query.get(), "user_ids"))
+    send_request(make_object<td_api::createNewBasicGroupChat>(std::move(initial_members), title.str()),
+                 std::make_unique<TdOnReturnChatCallback>(this, std::move(query)));
+  }
   return Status::OK();
 }
 
