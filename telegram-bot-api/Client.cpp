@@ -2452,7 +2452,8 @@ class Client::TdOnAuthorizationCallback : public TdQueryCallback {
 
 class Client::TdOnAuthorizationQueryCallback : public TdQueryCallback {
  public:
-  TdOnAuthorizationQueryCallback(Client *client, PromisedQueryPtr query) : client_(client), query_(std::move(query)) {
+  TdOnAuthorizationQueryCallback(Client *client, PromisedQueryPtr query) :
+      client_(client), query_(std::move(query)) {
   }
 
   void on_result(object_ptr<td_api::Object> result) override {
@@ -3947,7 +3948,7 @@ bool Client::have_message_access(int64 chat_id) const {
       auto supergroup_info = get_supergroup_info(chat_info->supergroup_id);
       CHECK(supergroup_info != nullptr);
       return !supergroup_info->is_supergroup || is_chat_member(supergroup_info->status);
-      //      return is_chat_member(supergroup_info->status);
+//      return is_chat_member(supergroup_info->status);
     }
     case ChatInfo::Type::Unknown:
     default:
@@ -4144,8 +4145,7 @@ void Client::on_update_file(object_ptr<td_api::file> file) {
   if (!is_file_being_downloaded(file_id)) {
     return;
   }
-  if ((!parameters_->local_mode_ || !parameters_->no_file_limit_) &&
-      file->local_->downloaded_size_ > MAX_DOWNLOAD_FILE_SIZE) {
+  if ((!parameters_->local_mode_ || !parameters_->no_file_limit_) && file->local_->downloaded_size_ > MAX_DOWNLOAD_FILE_SIZE) {
     if (file->local_->is_downloading_active_) {
       send_request(make_object<td_api::cancelDownloadFile>(file_id, false),
                    std::make_unique<TdOnCancelDownloadFileCallback>());
@@ -7964,8 +7964,7 @@ td::Status Client::process_delete_messages_query(PromisedQueryPtr &query) {
   }
 
   if (static_cast<td::uint32>(end - start) > parameters_->max_batch_operations) {
-    return Status::Error(400, PSLICE() << "Too many operations: maximum number of batch operation is "
-                                       << parameters_->max_batch_operations);
+    return Status::Error(400, PSLICE() << "Too many operations: maximum number of batch operation is " << parameters_->max_batch_operations);
   }
 
   check_chat(chat_id, AccessRights::Write, std::move(query), [this, start, end](int64 chat_id, PromisedQueryPtr query) {
