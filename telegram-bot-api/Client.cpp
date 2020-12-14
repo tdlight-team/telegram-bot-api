@@ -305,11 +305,12 @@ bool Client::init_methods() {
   methods_.emplace("searchpublicchats", &Client::process_search_public_chats_query);
   methods_.emplace("votepoll", &Client::process_set_poll_answer_query);
   methods_.emplace("joinchat", &Client::process_join_chat_query);
-  methods_.emplace("addchatmembers", &Client::process_add_chat_members_query);
+  methods_.emplace("addchatmembers", &Client::process_add_chat_member_query);
   methods_.emplace("reportchat", &Client::process_report_chat_query);
   methods_.emplace("createchat", &Client::process_create_chat_query);
   methods_.emplace("searchmessages", &Client::process_search_messages_query);
   methods_.emplace("searchchatmessages", &Client::process_search_chat_messages_query);
+  methods_.emplace("getcallbackqueryanswer", &Client::process_get_callback_query_answer_query);
 
   return true;
 }
@@ -2391,6 +2392,23 @@ class Client::JsonStickerSet : public Jsonable {
   const Client *client_;
 };
 
+class Client::JsonCallbackQueryAnswer : public Jsonable {
+ public:
+  JsonCallbackQueryAnswer(const td_api::callbackQueryAnswer *answer) : answer_(answer) {
+  }
+
+  void store(JsonValueScope *scope) const {
+    auto object = scope->enter_object();
+    object("text", answer_->text_);
+    object("show_alert", td::JsonBool(answer_->show_alert_));
+    object("url", answer_->url_);
+  }
+
+ private:
+  const td_api::callbackQueryAnswer *answer_;
+};
+
+
 class Client::TdOnOkCallback : public TdQueryCallback {
  public:
   void on_result(object_ptr<td_api::Object> result) override {
@@ -3485,37 +3503,6 @@ class Client::TdOnReturnChatCallback : public TdQueryCallback {
   PromisedQueryPtr query_;
 };
 
-class Client::TdOnAddChatMembersCallback : public TdQueryCallback {
- public:
-  explicit TdOnAddChatMembersCallback(Client *client, PromisedQueryPtr query, int64 chat_id,
-                                      std::vector<td::int32> user_ids)
-      : client_(client), query_(std::move(query)), chat_id_(chat_id), user_ids_(std::move(user_ids)) {
-  }
-
-  void on_result(object_ptr<td_api::Object> result) override {
-    if (result->get_id() == td_api::error::ID) {
-      return fail_query_with_error(std::move(query_), move_object_as<td_api::error>(result));
-    }
-    CHECK(result->get_id() == td_api::ok::ID);
-
-    if (user_ids_.empty()) {
-      return answer_query(td::JsonTrue(), std::move(query_));
-    } else {
-      td::int32 user_id = user_ids_.back();
-      user_ids_.pop_back();
-      client_->send_request(
-          make_object<td_api::addChatMember>(chat_id_, user_id, 0),
-          std::make_unique<TdOnAddChatMembersCallback>(client_, std::move(query_), chat_id_, std::move(user_ids_)));
-    }
-  }
-
- private:
-  Client *client_;
-  PromisedQueryPtr query_;
-  int64 chat_id_;
-  std::vector<td::int32> user_ids_;
-};
-
 class Client::TdOnReturnMessagesCallback : public TdQueryCallback {
  public:
   explicit TdOnReturnMessagesCallback(Client *client, PromisedQueryPtr query)
@@ -3534,6 +3521,25 @@ class Client::TdOnReturnMessagesCallback : public TdQueryCallback {
 
  private:
   Client *client_;
+  PromisedQueryPtr query_;
+};
+
+class Client::TdOnGetCallbackQueryAnswerCallback : public TdQueryCallback {
+ public:
+  explicit TdOnGetCallbackQueryAnswerCallback(PromisedQueryPtr query)
+      : query_(std::move(query)) {
+  }
+
+  void on_result(object_ptr<td_api::Object> result) override {
+    if (result->get_id() == td_api::error::ID) {
+      return fail_query_with_error(std::move(query_), move_object_as<td_api::error>(result));
+    }
+    CHECK(result->get_id() == td_api::callbackQueryAnswer::ID);
+
+    auto answer = move_object_as<td_api::callbackQueryAnswer>(result);
+    answer_query(JsonCallbackQueryAnswer(answer.get()), std::move(query_));
+  }
+
   PromisedQueryPtr query_;
 };
 
@@ -8073,25 +8079,21 @@ td::Status Client::process_join_chat_query(PromisedQueryPtr &query) {
   return Status::OK();
 }
 
-td::Status Client::process_add_chat_members_query(PromisedQueryPtr &query) {
+td::Status Client::process_add_chat_member_query(PromisedQueryPtr &query) {
   CHECK_IS_USER();
   auto chat_id = query->arg("chat_id");
-  TRY_RESULT(user_ids, get_int_array_arg<td::int32>(query.get(), "user_ids"));
-  if (user_ids.empty()) {
-    return Status::Error(400, "Argument user_ids may not be empty");
-  }
+  TRY_RESULT(user_id, get_user_id(query.get()))
 
   check_chat(chat_id, AccessRights::Write, std::move(query),
-             [this, user_ids = std::move(user_ids)](int64 chat_id, PromisedQueryPtr query) mutable {
+             [this, user_id](int64 chat_id, PromisedQueryPtr query) mutable {
                auto chat = get_chat(chat_id);
                if (chat->type == ChatInfo::Type::Supergroup) {
+                 std::vector<td::int32> user_ids{user_id};
                  send_request(make_object<td_api::addChatMembers>(chat_id, std::move(user_ids)),
                               std::make_unique<TdOnOkQueryCallback>(std::move(query)));
                } else if (chat->type == ChatInfo::Type::Group) {
-                 td::int32 user_id = user_ids.back();
-                 user_ids.pop_back();
                  send_request(make_object<td_api::addChatMember>(chat_id, user_id, 0),
-                              std::make_unique<TdOnAddChatMembersCallback>(this, std::move(query), chat_id, std::move(user_ids)));
+                              std::make_unique<TdOnOkQueryCallback>(std::move(query)));
                }
              });
   return Status::OK();
@@ -8160,11 +8162,25 @@ td::Status Client::process_search_chat_messages_query(PromisedQueryPtr &query) {
   TRY_RESULT(filter, get_search_messages_filter(query.get()));
 
   check_chat(chat_id, AccessRights::Read, std::move(query),
-             [this, query_, sender = std::move(sender), from_message_id,
-              filter = std::move(filter)](int64 chat_id, PromisedQueryPtr query) mutable {
+             [this, query_, sender = std::move(sender), from_message_id, filter = std::move(filter)](
+                 int64 chat_id, PromisedQueryPtr query) mutable {
                send_request(make_object<td_api::searchChatMessages>(chat_id, query_.str(), std::move(sender),
                                                                     from_message_id, 0, 100, std::move(filter), 0),
                             std::make_unique<TdOnReturnMessagesCallback>(this, std::move(query)));
+             });
+  return Status::OK();
+}
+
+td::Status Client::process_get_callback_query_answer_query(PromisedQueryPtr &query) {
+  CHECK_IS_USER();
+  auto chat_id = query->arg("chat_id");
+  auto message_id = get_message_id(query.get());
+  auto callback_data = query->arg("callback_data");
+  auto payload = make_object<td_api::callbackQueryPayloadData>(callback_data.str());
+  check_chat(chat_id, AccessRights::Read, std::move(query),
+             [this, message_id, payload = std::move(payload)](int64 chat_id, PromisedQueryPtr query) mutable {
+               send_request(make_object<td_api::getCallbackQueryAnswer>(chat_id, message_id, std::move(payload)),
+                            std::make_unique<TdOnGetCallbackQueryAnswerCallback>(std::move(query)));
              });
   return Status::OK();
 }

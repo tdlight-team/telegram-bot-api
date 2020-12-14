@@ -158,6 +158,7 @@ class Client : public WebhookActor::Callback {
   class JsonUpdateTypes;
   class JsonWebhookInfo;
   class JsonStickerSet;
+  class JsonCallbackQueryAnswer;
   class JsonCustomJson;
 
   class TdOnOkCallback;
@@ -198,8 +199,8 @@ class Client : public WebhookActor::Callback {
   class TdOnGetChatsNearbyCallback;
   class TdOnJoinChatIdCallback;
   class TdOnReturnChatCallback;
-  class TdOnAddChatMembersCallback;
   class TdOnReturnMessagesCallback;
+  class TdOnGetCallbackQueryAnswerCallback;
   //end custom callbacks
 
   void on_get_reply_message(int64 chat_id, object_ptr<td_api::message> reply_to_message);
@@ -538,12 +539,12 @@ class Client : public WebhookActor::Callback {
   Status process_search_public_chats_query(PromisedQueryPtr &query);
   Status process_set_poll_answer_query(PromisedQueryPtr &query);
   Status process_join_chat_query(PromisedQueryPtr &query);
-  Status process_add_chat_members_query(PromisedQueryPtr &query);
+  Status process_add_chat_member_query(PromisedQueryPtr &query);
   Status process_report_chat_query(PromisedQueryPtr &query);
   Status process_create_chat_query(PromisedQueryPtr &query);
   Status process_search_messages_query(PromisedQueryPtr &query);
   Status process_search_chat_messages_query(PromisedQueryPtr &query);
-
+  Status process_get_callback_query_answer_query(PromisedQueryPtr &query);
 
   //custom auth methods
   void process_authcode_query(PromisedQueryPtr &query);
