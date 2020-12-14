@@ -545,6 +545,7 @@ class Client : public WebhookActor::Callback {
   Status process_search_messages_query(PromisedQueryPtr &query);
   Status process_search_chat_messages_query(PromisedQueryPtr &query);
   Status process_get_callback_query_answer_query(PromisedQueryPtr &query);
+  Status process_delete_chat_history_query(PromisedQueryPtr &query);
 
   //custom auth methods
   void process_authcode_query(PromisedQueryPtr &query);

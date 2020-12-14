@@ -311,6 +311,7 @@ bool Client::init_methods() {
   methods_.emplace("searchmessages", &Client::process_search_messages_query);
   methods_.emplace("searchchatmessages", &Client::process_search_chat_messages_query);
   methods_.emplace("getcallbackqueryanswer", &Client::process_get_callback_query_answer_query);
+  methods_.emplace("deletechathistory", &Client::process_delete_chat_history_query);
 
   return true;
 }
@@ -8181,6 +8182,20 @@ td::Status Client::process_get_callback_query_answer_query(PromisedQueryPtr &que
              [this, message_id, payload = std::move(payload)](int64 chat_id, PromisedQueryPtr query) mutable {
                send_request(make_object<td_api::getCallbackQueryAnswer>(chat_id, message_id, std::move(payload)),
                             std::make_unique<TdOnGetCallbackQueryAnswerCallback>(std::move(query)));
+             });
+  return Status::OK();
+}
+
+td::Status Client::process_delete_chat_history_query(PromisedQueryPtr &query) {
+  CHECK_IS_USER();
+  auto chat_id = query->arg("chat_id");
+  bool for_everyone = to_bool(query->arg("for_everyone"));
+  bool remove_from_chat_list = to_bool(query->arg("remove_from_chat_list"));
+
+  check_chat(chat_id, AccessRights::Read, std::move(query),
+             [this, for_everyone, remove_from_chat_list](int64 chat_id, PromisedQueryPtr query) mutable {
+               send_request(make_object<td_api::deleteChatHistory>(chat_id, for_everyone, remove_from_chat_list),
+                            std::make_unique<TdOnOkQueryCallback>(std::move(query)));
              });
   return Status::OK();
 }
