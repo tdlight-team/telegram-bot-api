@@ -134,6 +134,7 @@ class Client : public WebhookActor::Callback {
   class JsonReplyMarkup;
   class JsonMessage;
   class JsonMessages;
+  class JsonMessages_;
   class JsonDeletedMessage;
   class JsonMessageId;
   class JsonInlineQuery;
@@ -198,6 +199,7 @@ class Client : public WebhookActor::Callback {
   class TdOnJoinChatIdCallback;
   class TdOnReturnChatCallback;
   class TdOnAddChatMembersCallback;
+  class TdOnReturnMessagesCallback;
   //end custom callbacks
 
   void on_get_reply_message(int64 chat_id, object_ptr<td_api::message> reply_to_message);
@@ -421,6 +423,10 @@ class Client : public WebhookActor::Callback {
                                int32 min_value = std::numeric_limits<int32>::min(),
                                int32 max_value = std::numeric_limits<int32>::max());
 
+  static int64 get_int64_arg(const Query *query, Slice field_name, int64 default_value,
+                             int64 min_value = std::numeric_limits<int64>::min(),
+                             int64 max_value = std::numeric_limits<int64>::max());
+
   static td::Result<td::MutableSlice> get_required_string_arg(const Query *query, Slice field_name);
 
   static int64 get_message_id(const Query *query, Slice field_name = Slice("message_id"));
@@ -430,6 +436,9 @@ class Client : public WebhookActor::Callback {
   static td::Result<int32> get_user_id(const Query *query, Slice field_name = Slice("user_id"));
 
   static td::Result<td_api::object_ptr<td_api::ChatReportReason>> get_report_reason(const Query *query, Slice field_name = Slice("reason"));
+
+  static td::Result<td_api::object_ptr<td_api::SearchMessagesFilter>> get_search_messages_filter(
+      const Query *query, Slice field_name = Slice("filter"));
 
   int64 extract_yet_unsent_message_query_id(int64 chat_id, int64 message_id, bool *is_reply_to_message_deleted);
 
@@ -532,6 +541,9 @@ class Client : public WebhookActor::Callback {
   Status process_add_chat_members_query(PromisedQueryPtr &query);
   Status process_report_chat_query(PromisedQueryPtr &query);
   Status process_create_chat_query(PromisedQueryPtr &query);
+  Status process_search_messages_query(PromisedQueryPtr &query);
+  Status process_search_chat_messages_query(PromisedQueryPtr &query);
+
 
   //custom auth methods
   void process_authcode_query(PromisedQueryPtr &query);

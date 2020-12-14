@@ -308,6 +308,8 @@ bool Client::init_methods() {
   methods_.emplace("addchatmembers", &Client::process_add_chat_members_query);
   methods_.emplace("reportchat", &Client::process_report_chat_query);
   methods_.emplace("createchat", &Client::process_create_chat_query);
+  methods_.emplace("searchmessages", &Client::process_search_messages_query);
+  methods_.emplace("searchchatmessages", &Client::process_search_chat_messages_query);
 
   return true;
 }
@@ -841,6 +843,24 @@ class Client::JsonMessages : public Jsonable {
 
  private:
   const td::vector<td::string> &messages_;
+};
+
+class Client::JsonMessages_ : public Jsonable {
+ public:
+  explicit JsonMessages_(object_ptr<td_api::messages> &messages, Client *client) : messages_(messages), client_(client) {
+  }
+  void store(JsonValueScope *scope) const {
+    auto array = scope->enter_array();
+    for (auto &message : messages_->messages_) {
+      auto full_message_id = client_->add_message(std::move(message));
+      const MessageInfo *m = client_->get_message(full_message_id.chat_id, full_message_id.message_id);
+      array << JsonMessage(m, true, "search", client_);
+    }
+  }
+
+ private:
+  object_ptr<td_api::messages> &messages_;
+  Client *client_;
 };
 
 class Client::JsonAnimation : public Jsonable {
@@ -3494,6 +3514,27 @@ class Client::TdOnAddChatMembersCallback : public TdQueryCallback {
   PromisedQueryPtr query_;
   int64 chat_id_;
   std::vector<td::int32> user_ids_;
+};
+
+class Client::TdOnReturnMessagesCallback : public TdQueryCallback {
+ public:
+  explicit TdOnReturnMessagesCallback(Client *client, PromisedQueryPtr query)
+      : client_(client), query_(std::move(query)) {
+  }
+
+  void on_result(object_ptr<td_api::Object> result) override {
+    if (result->get_id() == td_api::error::ID) {
+      return fail_query_with_error(std::move(query_), move_object_as<td_api::error>(result));
+    }
+    CHECK(result->get_id() == td_api::messages::ID);
+
+    auto messages = move_object_as<td_api::messages>(result);
+    answer_query(JsonMessages_(messages, client_), std::move(query_));
+  }
+
+ private:
+  Client *client_;
+  PromisedQueryPtr query_;
 };
 
 //end custom callbacks impl
@@ -6166,6 +6207,16 @@ td::int32 Client::get_integer_arg(const Query *query, Slice field_name, int32 de
   return td::clamp(td::to_integer<int32>(s_arg), min_value, max_value);
 }
 
+td::int64 Client::get_int64_arg (const Query *query, Slice field_name, int64 default_value, int64 min_value,
+                                 int64 max_value) {
+  auto s_arg = query->arg(field_name);
+  if (s_arg.empty()) {
+    return default_value;
+  }
+
+  return td::clamp(td::to_integer<int64>(s_arg), min_value, max_value);
+}
+
 td::Result<td::MutableSlice> Client::get_required_string_arg(const Query *query, Slice field_name) {
   auto s_arg = query->arg(field_name);
   if (s_arg.empty()) {
@@ -6224,6 +6275,52 @@ td::Result<td_api::object_ptr<td_api::ChatReportReason>> Client::get_report_reas
     result = make_object<td_api::chatReportReasonViolence>();
   } else {
     result = make_object<td_api::chatReportReasonCustom>(reason.str());
+  }
+  return std::move(result);
+}
+
+td::Result<td_api::object_ptr<td_api::SearchMessagesFilter>> Client::get_search_messages_filter(const Query *query,
+                                                                                   Slice field_name) {
+  auto reason = query->arg(field_name);
+  object_ptr<td_api::SearchMessagesFilter> result;
+  if (reason.empty()) {
+    result = make_object<td_api::searchMessagesFilterEmpty>();
+  } else if (reason == "animation") {
+    result = make_object<td_api::searchMessagesFilterAnimation>();
+  } else if (reason == "audio") {
+    result = make_object<td_api::searchMessagesFilterAudio>();
+  } else if (reason == "call") {
+    result = make_object<td_api::searchMessagesFilterCall>();
+  } else if (reason == "chat_photo") {
+    result = make_object<td_api::searchMessagesFilterChatPhoto>();
+  } else if (reason == "document") {
+    result = make_object<td_api::searchMessagesFilterDocument>();
+  } else if (reason == "failed_to_send") {
+    result = make_object<td_api::searchMessagesFilterFailedToSend>();
+  } else if (reason == "mention") {
+    result = make_object<td_api::searchMessagesFilterMention>();
+  } else if (reason == "missed_call") {
+    result = make_object<td_api::searchMessagesFilterMissedCall>();
+  } else if (reason == "photo") {
+    result = make_object<td_api::searchMessagesFilterPhoto>();
+  } else if (reason == "photo_and_video") {
+    result = make_object<td_api::searchMessagesFilterPhotoAndVideo>();
+  } else if (reason == "pinned") {
+    result = make_object<td_api::searchMessagesFilterPinned>();
+  } else if (reason == "unread_mention") {
+    result = make_object<td_api::searchMessagesFilterUnreadMention>();
+  } else if (reason == "url") {
+    result = make_object<td_api::searchMessagesFilterUrl>();
+  } else if (reason == "video") {
+    result = make_object<td_api::searchMessagesFilterVideo>();
+  } else if (reason == "video_note") {
+    result = make_object<td_api::searchMessagesFilterVideoNote>();
+  } else if (reason == "voice_and_video_note") {
+    result = make_object<td_api::searchMessagesFilterVoiceAndVideoNote>();
+  } else if (reason == "voice_note") {
+    result = make_object<td_api::searchMessagesFilterVoiceNote>();
+  } else {
+    return Status::Error(400, "Filter not valid");
   }
   return std::move(result);
 }
@@ -8031,6 +8128,44 @@ td::Status Client::process_create_chat_query(PromisedQueryPtr &query) {
     send_request(make_object<td_api::createNewBasicGroupChat>(std::move(initial_members), title.str()),
                  std::make_unique<TdOnReturnChatCallback>(this, std::move(query)));
   }
+  return Status::OK();
+}
+
+td::Status Client::process_search_messages_query(PromisedQueryPtr &query) {
+  CHECK_IS_USER();
+  auto query_ = query->arg("query");
+  auto offset_date = get_integer_arg(query.get(), "offset_date", 0);
+  auto offset_chat_id = get_int64_arg(query.get(), "offset_chat_id", 0);
+  auto offset_message_id = get_int64_arg(query.get(), "offset_message_id", 0);
+  TRY_RESULT(filter, get_search_messages_filter(query.get()));
+  auto min_date = get_integer_arg(query.get(), "min_date", 0);
+  auto max_date = get_integer_arg(query.get(), "max_date", 0);
+
+  send_request(make_object<td_api::searchMessages>(nullptr, query_.str(), offset_date, offset_chat_id,
+                                                   offset_message_id, 100, std::move(filter), min_date, max_date),
+               std::make_unique<TdOnReturnMessagesCallback>(this, std::move(query)));
+  return Status::OK();
+}
+
+td::Status Client::process_search_chat_messages_query(PromisedQueryPtr &query) {
+  CHECK_IS_USER();
+  auto chat_id = query->arg("chat_id");
+  auto query_ = query->arg("query");
+  auto sender_user_id = get_integer_arg(query.get(), "sender_user_id", 0);
+  auto sender = make_object<td_api::messageSenderUser>(sender_user_id);
+  if (sender_user_id == 0) {
+    sender = nullptr;
+  }
+  auto from_message_id = get_int64_arg(query.get(), "from_message_id", 0);
+  TRY_RESULT(filter, get_search_messages_filter(query.get()));
+
+  check_chat(chat_id, AccessRights::Read, std::move(query),
+             [this, query_, sender = std::move(sender), from_message_id,
+              filter = std::move(filter)](int64 chat_id, PromisedQueryPtr query) mutable {
+               send_request(make_object<td_api::searchChatMessages>(chat_id, query_.str(), std::move(sender),
+                                                                    from_message_id, 0, 100, std::move(filter), 0),
+                            std::make_unique<TdOnReturnMessagesCallback>(this, std::move(query)));
+             });
   return Status::OK();
 }
 
