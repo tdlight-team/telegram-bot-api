@@ -6293,43 +6293,43 @@ td::Result<td_api::object_ptr<td_api::ChatReportReason>> Client::get_report_reas
 
 td::Result<td_api::object_ptr<td_api::SearchMessagesFilter>> Client::get_search_messages_filter(const Query *query,
                                                                                    Slice field_name) {
-  auto reason = query->arg(field_name);
+  auto filter = query->arg(field_name);
   object_ptr<td_api::SearchMessagesFilter> result;
-  if (reason.empty()) {
+  if (filter.empty()) {
     result = make_object<td_api::searchMessagesFilterEmpty>();
-  } else if (reason == "animation") {
+  } else if (filter == "animation") {
     result = make_object<td_api::searchMessagesFilterAnimation>();
-  } else if (reason == "audio") {
+  } else if (filter == "audio") {
     result = make_object<td_api::searchMessagesFilterAudio>();
-  } else if (reason == "call") {
+  } else if (filter == "call") {
     result = make_object<td_api::searchMessagesFilterCall>();
-  } else if (reason == "chat_photo") {
+  } else if (filter == "chat_photo") {
     result = make_object<td_api::searchMessagesFilterChatPhoto>();
-  } else if (reason == "document") {
+  } else if (filter == "document") {
     result = make_object<td_api::searchMessagesFilterDocument>();
-  } else if (reason == "failed_to_send") {
+  } else if (filter == "failed_to_send") {
     result = make_object<td_api::searchMessagesFilterFailedToSend>();
-  } else if (reason == "mention") {
+  } else if (filter == "mention") {
     result = make_object<td_api::searchMessagesFilterMention>();
-  } else if (reason == "missed_call") {
+  } else if (filter == "missed_call") {
     result = make_object<td_api::searchMessagesFilterMissedCall>();
-  } else if (reason == "photo") {
+  } else if (filter == "photo") {
     result = make_object<td_api::searchMessagesFilterPhoto>();
-  } else if (reason == "photo_and_video") {
+  } else if (filter == "photo_and_video") {
     result = make_object<td_api::searchMessagesFilterPhotoAndVideo>();
-  } else if (reason == "pinned") {
+  } else if (filter == "pinned") {
     result = make_object<td_api::searchMessagesFilterPinned>();
-  } else if (reason == "unread_mention") {
+  } else if (filter == "unread_mention") {
     result = make_object<td_api::searchMessagesFilterUnreadMention>();
-  } else if (reason == "url") {
+  } else if (filter == "url") {
     result = make_object<td_api::searchMessagesFilterUrl>();
-  } else if (reason == "video") {
+  } else if (filter == "video") {
     result = make_object<td_api::searchMessagesFilterVideo>();
-  } else if (reason == "video_note") {
+  } else if (filter == "video_note") {
     result = make_object<td_api::searchMessagesFilterVideoNote>();
-  } else if (reason == "voice_and_video_note") {
+  } else if (filter == "voice_and_video_note") {
     result = make_object<td_api::searchMessagesFilterVoiceAndVideoNote>();
-  } else if (reason == "voice_note") {
+  } else if (filter == "voice_note") {
     result = make_object<td_api::searchMessagesFilterVoiceNote>();
   } else {
     return Status::Error(400, "Filter not valid");
@@ -7897,10 +7897,13 @@ td::Status Client::process_get_message_info_query(PromisedQueryPtr &query) {
 
 td::Status Client::process_get_chat_members_query(PromisedQueryPtr &query) {
   auto chat_id = query->arg("chat_id");
+  td::int32 offset = get_integer_arg(query.get(), "offset", 0);
+  td::int32 limit = get_integer_arg(query.get(), "limit", 200, 0, 200);
 
-  check_chat(chat_id, AccessRights::Read, std::move(query), [this](int64 chat_id, PromisedQueryPtr query) {
-    auto chat_info = get_chat(chat_id);
-    CHECK(chat_info != nullptr);
+  check_chat(
+      chat_id, AccessRights::Read, std::move(query), [this, offset, limit](int64 chat_id, PromisedQueryPtr query) {
+        auto chat_info = get_chat(chat_id);
+        CHECK(chat_info != nullptr);
     switch (chat_info->type) {
       case ChatInfo::Type::Private:
         return fail_query(400, "Bad Request: there are no administrators in the private chat", std::move(query));
@@ -7910,11 +7913,31 @@ td::Status Client::process_get_chat_members_query(PromisedQueryPtr &query) {
         return send_request(make_object<td_api::getBasicGroupFullInfo>(chat_info->group_id),
                             std::make_unique<TdOnGetGroupMembersCallback>(this, false, std::move(query)));
       }
-      case ChatInfo::Type::Supergroup:
+      case ChatInfo::Type::Supergroup: {
+        td_api::object_ptr<td_api::SupergroupMembersFilter> filter;
+        td::string filter_name = td::to_lower(query->arg("filter"));
+        auto query_ = query->arg("query");
+        if (!query->empty()) {
+          filter = td_api::make_object<td_api::supergroupMembersFilterSearch>(query_.str());
+        } else if (filter_name == "members" || filter_name == "participants") {
+          filter = td_api::make_object<td_api::supergroupMembersFilterRecent>();
+        } else if (filter_name == "banned") {
+          filter = td_api::make_object<td_api::supergroupMembersFilterBanned>();
+        } else if (filter_name == "restricted") {
+          filter = td_api::make_object<td_api::supergroupMembersFilterRestricted>();
+        } else if (filter_name == "bots") {
+          filter = td_api::make_object<td_api::supergroupMembersFilterBots>();
+        } else if (filter_name == "admins" || filter_name == "administrators") {
+          filter = td_api::make_object<td_api::supergroupMembersFilterAdministrators>();
+        } else {
+          fail_query_with_error(std::move(query), 400, "Invalid member type");
+          return;
+        }
         return send_request(
             make_object<td_api::getSupergroupMembers>(
-                chat_info->supergroup_id, make_object<td_api::supergroupMembersFilterRecent>(), 0, 100),
+                chat_info->supergroup_id, std::move(filter), offset, limit),
             std::make_unique<TdOnGetSupergroupMembersCallback>(this, get_chat_type(chat_id), std::move(query)));
+      }
       case ChatInfo::Type::Unknown:
       default:
         UNREACHABLE();
@@ -7956,11 +7979,10 @@ td::Status Client::process_delete_messages_query(PromisedQueryPtr &query) {
       ids.push_back(as_tdlib_message_id(i));
     }
 
-    if (ids.size() != 0) {
+    if (!ids.empty()) {
       send_request(make_object<td_api::deleteMessages>(chat_id, std::move(ids), true),
-                   std::make_unique<TdOnOkCallback>());
+                   std::make_unique<TdOnOkQueryCallback>(std::move(query)));
     }
-    answer_query(td::JsonTrue(), std::move(query));
   });
 
   return Status::OK();
