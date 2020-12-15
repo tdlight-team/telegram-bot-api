@@ -292,7 +292,8 @@ bool Client::init_methods() {
 
   //custom methods
   methods_.emplace("getmessageinfo", &Client::process_get_message_info_query);
-  methods_.emplace("getparticipants", &Client::process_get_participants_query);
+  methods_.emplace("getparticipants", &Client::process_get_chat_members_query);
+  methods_.emplace("getchatmembers", &Client::process_get_chat_members_query);
   methods_.emplace("deletemessages", &Client::process_delete_messages_query);
   methods_.emplace("togglegroupinvites", &Client::process_toggle_group_invites_query);
   methods_.emplace("ping", &Client::process_ping_query);
@@ -6180,8 +6181,12 @@ td::Result<td::vector<td::string>> Client::get_poll_options(const Query *query) 
 }
 
 template <class T>
-td::Result<td::vector<T>> Client::get_int_array_arg(const Query *query, Slice field_name) {
+td::Result<td::vector<T>> Client::get_int_array_arg(const Query *query, Slice field_name, bool optional) {
   auto input_options = query->arg(field_name);
+  if (input_options.empty() && optional) {
+    td::vector<T> array;
+    return std::move(array);
+  }
   LOG(INFO) << "Parsing JSON object: " << input_options;
   auto r_value = json_decode(input_options);
   if (r_value.is_error()) {
@@ -7890,53 +7895,26 @@ td::Status Client::process_get_message_info_query(PromisedQueryPtr &query) {
   return Status::OK();
 }
 
-td::Status Client::process_get_participants_query(PromisedQueryPtr &query) {
+td::Status Client::process_get_chat_members_query(PromisedQueryPtr &query) {
   auto chat_id = query->arg("chat_id");
 
   check_chat(chat_id, AccessRights::Read, std::move(query), [this](int64 chat_id, PromisedQueryPtr query) {
     auto chat_info = get_chat(chat_id);
     CHECK(chat_info != nullptr);
-    td::int32 offset = get_integer_arg(query.get(), "offset", 0);
-    td::int32 limit = get_integer_arg(query.get(), "limit", 200, 0, 200);
-
     switch (chat_info->type) {
       case ChatInfo::Type::Private:
-        return fail_query(400, "Bad Request: there are no participants in the private chat", std::move(query));
+        return fail_query(400, "Bad Request: there are no administrators in the private chat", std::move(query));
       case ChatInfo::Type::Group: {
-        /*
         auto group_info = get_group_info(chat_info->group_id);
         CHECK(group_info != nullptr);
         return send_request(make_object<td_api::getBasicGroupFullInfo>(chat_info->group_id),
-                            std::make_unique<TdOnGetGroupMembersCallback>(this, true, std::move(query)))
-        */
-        return fail_query(400, "Bad Request: method not available for group chats", std::move(query));
+                            std::make_unique<TdOnGetGroupMembersCallback>(this, false, std::move(query)));
       }
-      case ChatInfo::Type::Supergroup: {
-        td_api::object_ptr<td_api::SupergroupMembersFilter> filter;
-        td::string type = "members";
-        if (query->has_arg("type")) {
-          type = td::to_lower(query->arg("type"));
-        }
-
-        if (type == "members" || type == "participants") {
-          filter = td_api::make_object<td_api::supergroupMembersFilterRecent>();
-        } else if (type == "banned") {
-          filter = td_api::make_object<td_api::supergroupMembersFilterBanned>();
-        } else if (type == "restricted") {
-          filter = td_api::make_object<td_api::supergroupMembersFilterRestricted>();
-        } else if (type == "bots") {
-          filter = td_api::make_object<td_api::supergroupMembersFilterBots>();
-        } else if (type == "admins" || type == "administrators") {
-          filter = td_api::make_object<td_api::supergroupMembersFilterAdministrators>();
-        } else {
-          fail_query_with_error(std::move(query), 400, "Invalid member type");
-          return;
-        }
-
+      case ChatInfo::Type::Supergroup:
         return send_request(
-            make_object<td_api::getSupergroupMembers>(chat_info->supergroup_id, std::move(filter), offset, limit),
+            make_object<td_api::getSupergroupMembers>(
+                chat_info->supergroup_id, make_object<td_api::supergroupMembersFilterRecent>(), 0, 100),
             std::make_unique<TdOnGetSupergroupMembersCallback>(this, get_chat_type(chat_id), std::move(query)));
-      }
       case ChatInfo::Type::Unknown:
       default:
         UNREACHABLE();
@@ -7963,7 +7941,7 @@ td::Status Client::process_delete_messages_query(PromisedQueryPtr &query) {
     return Status::Error(400, "Initial message identifier is not lower than last message identifier");
   }
 
-  if (static_cast<td::uint32>(end - start) > parameters_->max_batch_operations) {
+  if (static_cast<td::uint32>(end-start) > parameters_->max_batch_operations) {
     return Status::Error(400, PSLICE() << "Too many operations: maximum number of batch operation is " << parameters_->max_batch_operations);
   }
 
@@ -7973,7 +7951,7 @@ td::Status Client::process_delete_messages_query(PromisedQueryPtr &query) {
     }
 
     td::vector<td::int64> ids;
-    ids.reserve(end - start + 1);
+    ids.reserve(end-start+1);
     for (td::int32 i = start; i <= end; i++) {
       ids.push_back(as_tdlib_message_id(i));
     }

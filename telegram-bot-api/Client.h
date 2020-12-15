@@ -418,7 +418,7 @@ class Client : public WebhookActor::Callback {
   static td::Result<td::vector<td::string>> get_poll_options(const Query *query);
 
   template <class T>
-  static td::Result<td::vector<T>> get_int_array_arg(const Query *query, Slice field_name);
+  static td::Result<td::vector<T>> get_int_array_arg(const Query *query, Slice field_name, bool optional = false);
 
   static int32 get_integer_arg(const Query *query, Slice field_name, int32 default_value,
                                int32 min_value = std::numeric_limits<int32>::min(),
@@ -526,7 +526,7 @@ class Client : public WebhookActor::Callback {
 
   //custom methods
   Status process_get_message_info_query(PromisedQueryPtr &query);
-  Status process_get_participants_query(PromisedQueryPtr &query);
+  Status process_get_chat_members_query(PromisedQueryPtr &query);
   Status process_delete_messages_query(PromisedQueryPtr &query);
   Status process_toggle_group_invites_query(PromisedQueryPtr &query);
   Status process_ping_query(PromisedQueryPtr &query);
