@@ -125,8 +125,8 @@ class JsonStatsCpu : public td::Jsonable {
               ("key '" + stat.key_ + "' must be one of ['total_cpu', 'user_cpu', 'system_cpu']").c_str(), __FILE__,
               __LINE__);
         }
-        array << item;
       }
+      array << item;
     }
   }
 
