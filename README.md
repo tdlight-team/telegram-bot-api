@@ -37,8 +37,11 @@ Please note that only TDLight-specific issues are suitable for this repository.
 
 <a name="added-api-methods"></a>
 #### Added API Methods
-##### Method `optimize_memory`
-Calling `optimize_memory` will remove old data from the in-memory cache and give the freed memory back to the os
+##### Method `optimizeMemory`
+Calling `optimizeMemory` will remove old data from the in-memory cache and give the freed memory back to the os
+
+##### Method `getMemoryStats`
+Calling `getMemoryStats` will return a json containing the info about the memory manager, more info [here](https://github.com/tdlight-team/tdlight#tdapigetmemorystatistics)
 
 ##### Method `getMessageInfo`
 Get information about a message
@@ -104,7 +107,7 @@ Allow http connection in non-local mode
 ##### Flag `--max-batch-operations=<number>`
 maximum number of batch operations (default 10000)
 
-##### Executable parameter `--hide-sensible-data`
+##### Executable parameter `--stats-hide-sensible-data`
 Makes the stats page (if enabled) hide the bot token and the webhook url to no leak user secrets, when served publicly.
 
 #### Existing Command Line Parameters
