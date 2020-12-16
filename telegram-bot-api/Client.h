@@ -195,6 +195,7 @@ class Client : public WebhookActor::Callback {
 
   //start custom callbacks
   class TdOnPingCallback;
+  class TdOnGetMemoryStatisticsCallback;
   class TdOnGetChatsCallback;
   class TdOnGetChatsNearbyCallback;
   class TdOnJoinChatIdCallback;
@@ -530,6 +531,7 @@ class Client : public WebhookActor::Callback {
   Status process_delete_messages_query(PromisedQueryPtr &query);
   Status process_toggle_group_invites_query(PromisedQueryPtr &query);
   Status process_ping_query(PromisedQueryPtr &query);
+  Status process_get_memory_stats_query(PromisedQueryPtr &query);
 
   //custom user methods
   Status process_get_chats_query(PromisedQueryPtr &query);
