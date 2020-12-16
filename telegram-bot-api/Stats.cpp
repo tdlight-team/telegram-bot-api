@@ -78,6 +78,7 @@ td::vector<td::vector<StatItem>> ServerCpuStat::as_json_ready_vector(double now)
   td::vector<td::vector<StatItem>> res;
   auto first = stat_[0].get_stat(now).as_vector();
   auto first_size = first.size();
+  res.push_back(first);
   for (std::size_t i = 1; i < SIZE; i++) {
     auto other = stat_[i].get_stat(now).as_vector();
     CHECK(other.size() == first_size);

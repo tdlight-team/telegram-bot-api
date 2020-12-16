@@ -63,9 +63,9 @@ class ServerCpuStat {
   td::vector<StatItem> as_vector(double now);
   td::vector<td::vector<StatItem>> as_json_ready_vector(double now);
 
- private:
   static constexpr std::size_t SIZE = 4;
   static constexpr const char *DESCR[SIZE] = {"inf", "5sec", "1min", "1hour"};
+ private:
   static constexpr int DURATIONS[SIZE] = {0, 5, 60, 60 * 60};
 
   std::mutex mutex_;

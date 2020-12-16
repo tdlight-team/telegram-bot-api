@@ -105,29 +105,38 @@ class JsonStatsCpuItem : public td::Jsonable {
  private:
 };
 
+class JsonStatsCpuStat : public td::Jsonable {
+ public:
+  explicit JsonStatsCpuStat(const StatItem& inf, const StatItem& five_sec, const StatItem& one_min, const StatItem& one_hour) :
+      inf_(inf), five_sec_(five_sec), one_min_(one_min), one_hour_(one_hour) {
+  }
+  void store(td::JsonValueScope *scope) const {
+    auto object = scope->enter_object();
+    object(td::Slice(ServerCpuStat::DESCR[0]), td::JsonString(td::Slice(inf_.value_)));
+    object(td::Slice(ServerCpuStat::DESCR[1]), td::JsonString(td::Slice(five_sec_.value_)));
+    object(td::Slice(ServerCpuStat::DESCR[2]), td::JsonString(td::Slice(one_min_.value_)));
+    object(td::Slice(ServerCpuStat::DESCR[3]), td::JsonString(td::Slice(one_hour_.value_)));
+  }
+ private:
+  const StatItem& inf_;
+  const StatItem& five_sec_;
+  const StatItem& one_min_;
+  const StatItem& one_hour_;
+};
+
 class JsonStatsCpu : public td::Jsonable {
  public:
   explicit JsonStatsCpu(td::vector<td::vector<StatItem>> cpu_stats) : cpu_stats_(std::move(cpu_stats)) {
   }
   void store(td::JsonValueScope *scope) const {
-    auto array = scope->enter_array();
-    for (const auto &stats : cpu_stats_) {
-      auto item = JsonStatsCpuItem();
-      for (const auto &stat : stats) {
-        if (stat.key_ == "total_cpu") {
-          item.total_cpu_ = stat.value_;
-        } else if (stat.key_ == "user_cpu") {
-          item.user_cpu_ = stat.value_;
-        } else if (stat.key_ == "system_cpu") {
-          item.system_cpu_ = stat.value_;
-        } else {
-          ::td::detail::process_check_error(
-              ("key '" + stat.key_ + "' must be one of ['total_cpu', 'user_cpu', 'system_cpu']").c_str(), __FILE__,
-              __LINE__);
-        }
-      }
-      array << item;
-    }
+    auto object = scope->enter_object();
+    CHECK(cpu_stats_.size() == ServerCpuStat::SIZE);
+    CHECK(cpu_stats_[0].size() == 3);
+    CHECK(cpu_stats_[1].size() == 3);
+    CHECK(cpu_stats_[2].size() == 3);
+    object("total_cpu", JsonStatsCpuStat(cpu_stats_[0][0], cpu_stats_[1][0], cpu_stats_[2][0], cpu_stats_[3][0]));
+    object("user_cpu", JsonStatsCpuStat(cpu_stats_[0][1], cpu_stats_[1][1], cpu_stats_[2][1], cpu_stats_[3][1]));
+    object("system_cpu", JsonStatsCpuStat(cpu_stats_[0][2], cpu_stats_[1][2], cpu_stats_[2][2], cpu_stats_[3][2]));
   }
 
  private:
