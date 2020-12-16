@@ -186,11 +186,10 @@ class BotStatActor final : public td::Actor {
 
   bool is_active(double now) const;
 
- private:
   static constexpr std::size_t SIZE = 4;
-  static constexpr const char *DESCR[SIZE] = {"inf", "5sec", "1min", "1hour"};
   static constexpr int DURATIONS[SIZE] = {0, 5, 60, 60 * 60};
-
+  static constexpr const char *DESCR[SIZE] = {"inf", "5sec", "1min", "1hour"};
+ private:
   td::TimedStat<ServerBotStat> stat_[SIZE];
   td::ActorId<BotStatActor> parent_;
   double last_activity_timestamp_ = -1e9;

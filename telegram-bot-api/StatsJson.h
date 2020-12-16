@@ -148,41 +148,65 @@ class JsonStatsBot : public td::Jsonable {
   const std::pair<td::int64, td::uint64> score_id_pair_;
 };
 
-class JsonStatsBotStat : public td::Jsonable {
+class JsonStatsBotStatDouble : public td::Jsonable {
  public:
-  explicit JsonStatsBotStat(const ServerBotStat stat) : stat_(stat) {
+  explicit JsonStatsBotStatDouble(const double inf, const double five_sec, const double one_min, const double one_hour) :
+      inf_(inf), five_sec_(five_sec), one_min_(one_min), one_hour_(one_hour) {
   }
   void store(td::JsonValueScope *scope) const {
     auto object = scope->enter_object();
-    object("request_count", td::JsonFloat(stat_.request_count_));
-    object("request_bytes", td::JsonFloat(stat_.request_bytes_));
-    object("request_file_count", td::JsonFloat(stat_.request_file_count_));
-    object("request_files_bytes", td::JsonFloat(stat_.request_files_bytes_));
-    object("request_files_max_bytes", td::JsonLong(stat_.request_files_max_bytes_));
-    object("response_count", td::JsonFloat(stat_.response_count_));
-    object("response_count_ok", td::JsonFloat(stat_.response_count_ok_));
-    object("response_count_error", td::JsonFloat(stat_.response_count_error_));
-    object("response_bytes", td::JsonFloat(stat_.response_bytes_));
-    object("update_count", td::JsonFloat(stat_.update_count_));
+    object(td::Slice(BotStatActor::DESCR[0]), td::JsonFloat(inf_));
+    object(td::Slice(BotStatActor::DESCR[1]), td::JsonFloat(five_sec_));
+    object(td::Slice(BotStatActor::DESCR[2]), td::JsonFloat(one_min_));
+    object(td::Slice(BotStatActor::DESCR[3]), td::JsonFloat(one_hour_));
   }
+ private:
+  const double inf_;
+  const double five_sec_;
+  const double one_min_;
+  const double one_hour_;
+};
 
- protected:
-  const ServerBotStat stat_;
+class JsonStatsBotStatLong : public td::Jsonable {
+ public:
+  explicit JsonStatsBotStatLong(const td::int64 inf, const td::int64 five_sec, const td::int64 one_min, const td::int64 one_hour) :
+      inf_(inf), five_sec_(five_sec), one_min_(one_min), one_hour_(one_hour) {
+  }
+  void store(td::JsonValueScope *scope) const {
+    auto object = scope->enter_object();
+    object(td::Slice(BotStatActor::DESCR[0]), td::JsonLong(inf_));
+    object(td::Slice(BotStatActor::DESCR[1]), td::JsonLong(five_sec_));
+    object(td::Slice(BotStatActor::DESCR[2]), td::JsonLong(one_min_));
+    object(td::Slice(BotStatActor::DESCR[3]), td::JsonLong(one_hour_));
+  }
+ private:
+  const td::int64 inf_;
+  const td::int64 five_sec_;
+  const td::int64 one_min_;
+  const td::int64 one_hour_;
 };
 
 class JsonStatsBotStats : public td::Jsonable {
  public:
-  explicit JsonStatsBotStats(const std::vector<ServerBotStat> stats) : stats_(stats) {
+  explicit JsonStatsBotStats(td::vector<ServerBotStat> stats) : stats_(std::move(stats)) {
+    CHECK(BotStatActor::SIZE == 4 && "Check that we have 4 fields.");
   }
   void store(td::JsonValueScope *scope) const {
-    auto list = scope->enter_array();
-    for(const auto &stat : stats_) {
-      list << JsonStatsBotStat(stat);
-    }
+    auto object = scope->enter_object();
+    object("request_count", JsonStatsBotStatDouble(stats_[0].request_count_, stats_[1].request_count_, stats_[2].request_count_, stats_[3].request_count_));
+    object("request_bytes", JsonStatsBotStatDouble(stats_[0].request_bytes_, stats_[1].request_bytes_, stats_[2].request_bytes_, stats_[3].request_bytes_));
+    object("request_file_count", JsonStatsBotStatDouble(stats_[0].request_file_count_, stats_[1].request_file_count_, stats_[2].request_file_count_, stats_[3].request_file_count_));
+    object("request_files_bytes", JsonStatsBotStatDouble(stats_[0].request_files_bytes_, stats_[1].request_files_bytes_, stats_[2].request_files_bytes_, stats_[3].request_files_bytes_));
+    object("request_files_max_bytes", JsonStatsBotStatLong(stats_[0].request_files_max_bytes_, stats_[1].request_files_max_bytes_, stats_[2].request_files_max_bytes_, stats_[3].request_files_max_bytes_));
+    object("response_count", JsonStatsBotStatDouble(stats_[0].response_count_, stats_[1].response_count_, stats_[2].response_count_, stats_[3].response_count_));
+    object("response_count_ok", JsonStatsBotStatDouble(stats_[0].response_count_ok_, stats_[1].response_count_ok_, stats_[2].response_count_ok_, stats_[3].response_count_ok_));
+    object("response_count_error", JsonStatsBotStatDouble(stats_[0].response_count_error_, stats_[1].response_count_error_, stats_[2].response_count_error_, stats_[3].response_count_error_));
+    object("response_bytes", JsonStatsBotStatDouble(stats_[0].response_bytes_, stats_[1].response_bytes_, stats_[2].response_bytes_, stats_[3].response_bytes_));
+    object("update_count", JsonStatsBotStatDouble(stats_[0].update_count_, stats_[1].update_count_, stats_[2].update_count_, stats_[3].update_count_));
   }
 
  protected:
-  const std::vector<ServerBotStat> stats_;
+  const td::vector<ServerBotStat> stats_;
 };
 
 class JsonStatsBotAdvanced : public JsonStatsBot {
@@ -219,7 +243,7 @@ class JsonStatsBotAdvanced : public JsonStatsBot {
     object("tail_update_id", td::JsonInt(bot_.tail_update_id_));
     object("pending_update_count", td::narrow_cast<td::int32>(bot_.pending_update_count_));
     object("webhook_max_connections", td::JsonInt(bot_.webhook_max_connections_));
-    object("stats", JsonStatsBotStats(stats_));
+    object("stats", JsonStatsBotStats(std::move(stats_)));
   }
  private:
   const ServerBotInfo bot_;
