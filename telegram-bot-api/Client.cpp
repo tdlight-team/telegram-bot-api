@@ -6446,7 +6446,7 @@ void Client::on_cmd(PromisedQueryPtr query) {
   if (waiting_for_auth_input_) {
     if (query->method() == "authcode") {
       return process_authcode_query(query);
-    } else if (query->method() == "2fapassword") {
+    } else if (query->method() == "2fapassword" || query->method() == "authpassword") {
       return process_2fapassword_query(query);
     } else if (query->method() == "registeruser" && parameters_->allow_users_registration_) {
       return process_register_user_query(query);
