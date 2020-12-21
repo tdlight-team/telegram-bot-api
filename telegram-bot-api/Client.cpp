@@ -314,6 +314,8 @@ bool Client::init_methods() {
   methods_.emplace("searchchatmessages", &Client::process_search_chat_messages_query);
   methods_.emplace("getcallbackqueryanswer", &Client::process_get_callback_query_answer_query);
   methods_.emplace("deletechathistory", &Client::process_delete_chat_history_query);
+  methods_.emplace("getscheduledmessages", &Client::process_get_scheduled_messages_query);
+  methods_.emplace("editmessagescheduling", &Client::process_edit_message_scheduling_query);
 
   return true;
 }
@@ -1611,7 +1613,11 @@ class Client::JsonReplyMarkup : public Jsonable {
 void Client::JsonMessage::store(JsonValueScope *scope) const {
   CHECK(message_ != nullptr);
   auto object = scope->enter_object();
-  object("message_id", as_client_message_id(message_->id));
+  if (message_->is_scheduled) {
+    object("message_id", as_scheduled_message_id(message_->id));
+  } else {
+    object("message_id", as_client_message_id(message_->id));
+  }
   if (message_->sender_user_id != 0) {
     object("from", JsonUser(message_->sender_user_id, client_));
   }
@@ -1631,6 +1637,12 @@ void Client::JsonMessage::store(JsonValueScope *scope) const {
   }
   if (message_->forwards != 0) {
     object("forwards", message_->forwards);
+  }
+  if (message_->is_scheduled) {
+    object("is_scheduled", td::JsonBool(message_->is_scheduled));
+  }
+  if (message_->scheduled_at != 0) {
+    object("scheduled_at", message_->scheduled_at);
   }
   if (message_->initial_send_date > 0) {
     if (message_->initial_sender_user_id != 0) {
@@ -5242,8 +5254,8 @@ td::Result<td_api::object_ptr<td_api::InputMessageContent>> Client::get_input_me
   return nullptr;
 }
 
-td_api::object_ptr<td_api::messageSendOptions> Client::get_message_send_options(bool disable_notification) {
-  return make_object<td_api::messageSendOptions>(disable_notification, false, nullptr);
+td_api::object_ptr<td_api::messageSendOptions> Client::get_message_send_options(bool disable_notification, td_api::object_ptr<td_api::MessageSchedulingState> &&scheduling_state) {
+  return make_object<td_api::messageSendOptions>(disable_notification, false, std::move(scheduling_state));
 }
 
 td::Result<td::vector<td_api::object_ptr<td_api::InputInlineQueryResult>>> Client::get_inline_query_results(
@@ -6177,6 +6189,18 @@ td::Result<td::vector<td_api::object_ptr<td_api::InputMessageContent>>> Client::
   return std::move(contents);
 }
 
+td::Result<td_api::object_ptr<td_api::MessageSchedulingState>> Client::get_message_scheduling_state(const Query *query) {
+  auto send_at = trim(query->arg("send_at"));
+  if (send_at.empty()) {
+    return nullptr;
+  } else if (send_at == "online") {
+    return make_object<td_api::messageSchedulingStateSendWhenOnline>();
+  } else {
+    TRY_RESULT(send_at_date, td::to_integer_safe<td::int32>(send_at));
+    return make_object<td_api::messageSchedulingStateSendAtDate>(send_at_date);
+  }
+}
+
 td::Result<td::vector<td::string>> Client::get_poll_options(const Query *query) {
   auto input_options = query->arg("options");
   LOG(INFO) << "Parsing JSON object: " << input_options;
@@ -6265,9 +6289,9 @@ td::int64 Client::get_message_id(const Query *query, Slice field_name) {
   }
 
   int arg = td::to_integer<int32>(s_arg);
-  if (arg < 0) {
-    return 0;
-  }
+  // if (arg < 0) {
+  //   return 0;
+  // }
 
   return as_tdlib_message_id(arg);
 }
@@ -6856,17 +6880,18 @@ td::Status Client::process_send_media_group_query(PromisedQueryPtr &query) {
   // TRY_RESULT(reply_markup, get_reply_markup(query.get()));
   auto reply_markup = nullptr;
   TRY_RESULT(input_message_contents, get_input_message_contents(query.get(), "media"));
+  TRY_RESULT(send_at, get_message_scheduling_state(query.get()));
 
   resolve_reply_markup_bot_usernames(
       std::move(reply_markup), std::move(query),
       [this, chat_id = chat_id.str(), reply_to_message_id, allow_sending_without_reply, disable_notification,
-       input_message_contents = std::move(input_message_contents)](object_ptr<td_api::ReplyMarkup> reply_markup,
-                                                                   PromisedQueryPtr query) mutable {
+       input_message_contents = std::move(input_message_contents),
+       send_at = std::move(send_at)](object_ptr<td_api::ReplyMarkup> reply_markup, PromisedQueryPtr query) mutable {
         auto on_success = [this, disable_notification, input_message_contents = std::move(input_message_contents),
-                           reply_markup = std::move(reply_markup)](int64 chat_id, int64 reply_to_message_id,
-                                                                   PromisedQueryPtr query) mutable {
+                           reply_markup = std::move(reply_markup), send_at = std::move(send_at)](
+                              int64 chat_id, int64 reply_to_message_id, PromisedQueryPtr query) mutable {
           send_request(make_object<td_api::sendMessageAlbum>(chat_id, 0, reply_to_message_id,
-                                                             get_message_send_options(disable_notification),
+                                                             get_message_send_options(disable_notification, std::move(send_at)),
                                                              std::move(input_message_contents)),
                        std::make_unique<TdOnSendMessageAlbumCallback>(this, std::move(query)));
         };
@@ -8226,6 +8251,30 @@ td::Status Client::process_delete_chat_history_query(PromisedQueryPtr &query) {
   return Status::OK();
 }
 
+td::Status Client::process_get_scheduled_messages_query(PromisedQueryPtr &query) {
+  CHECK_IS_USER();
+  auto chat_id = query->arg("chat_id");
+  check_chat(chat_id, AccessRights::Read, std::move(query),
+             [this](int64 chat_id, PromisedQueryPtr query) mutable {
+               send_request(make_object<td_api::getChatScheduledMessages>(chat_id),
+                            std::make_unique<TdOnReturnMessagesCallback>(this, std::move(query)));
+             });
+  return Status::OK();
+}
+
+td::Status Client::process_edit_message_scheduling_query(PromisedQueryPtr &query) {
+  CHECK_IS_USER();
+  auto chat_id = query->arg("chat_id");
+  auto message_id = get_message_id(query.get());
+  TRY_RESULT(send_at, get_message_scheduling_state(query.get()));
+  check_chat(chat_id, AccessRights::Read, std::move(query),
+             [this, message_id, send_at = std::move(send_at)](int64 chat_id, PromisedQueryPtr query) mutable {
+               send_request(make_object<td_api::editMessageSchedulingState>(chat_id, message_id, std::move(send_at)),
+                            std::make_unique<TdOnOkQueryCallback>(std::move(query)));
+             });
+  return Status::OK();
+}
+
 //end custom user methods impl
 //start custom auth methods impl
 
@@ -8489,16 +8538,22 @@ void Client::do_send_message(object_ptr<td_api::InputMessageContent> input_messa
     return fail_query_with_error(std::move(query), 405, "Method Not Allowed: reply markup not available as user.");
   }
 
+  auto r_send_at = get_message_scheduling_state(query.get());
+  if (r_send_at.is_error()) {
+    return fail_query_with_error(std::move(query), 400, r_send_at.error().message());
+  }
+  auto send_at = r_send_at.move_as_ok();
+
   resolve_reply_markup_bot_usernames(
       std::move(reply_markup), std::move(query),
       [this, chat_id = chat_id.str(), reply_to_message_id, allow_sending_without_reply, disable_notification,
-       input_message_content = std::move(input_message_content)](object_ptr<td_api::ReplyMarkup> reply_markup,
-                                                                 PromisedQueryPtr query) mutable {
+       input_message_content = std::move(input_message_content),
+       send_at = std::move(send_at)](object_ptr<td_api::ReplyMarkup> reply_markup, PromisedQueryPtr query) mutable {
         auto on_success = [this, disable_notification, input_message_content = std::move(input_message_content),
-                           reply_markup = std::move(reply_markup)](int64 chat_id, int64 reply_to_message_id,
-                                                                   PromisedQueryPtr query) mutable {
+                           reply_markup = std::move(reply_markup), send_at = std::move(send_at)](
+                              int64 chat_id, int64 reply_to_message_id, PromisedQueryPtr query) mutable {
           send_request(make_object<td_api::sendMessage>(chat_id, 0, reply_to_message_id,
-                                                        get_message_send_options(disable_notification),
+                                                        get_message_send_options(disable_notification, std::move(send_at)),
                                                         std::move(reply_markup), std::move(input_message_content)),
                        std::make_unique<TdOnSendMessageCallback>(this, std::move(query)));
         };
@@ -9840,6 +9895,12 @@ Client::FullMessageId Client::add_message(object_ptr<td_api::message> &&message,
     message_info->views = message->interaction_info_->view_count_;
     message_info->forwards = message->interaction_info_->forward_count_;
   }
+  message_info->is_scheduled = message->scheduling_state_!=nullptr;
+  if (message->scheduling_state_ != nullptr &&
+      message->scheduling_state_->get_id() == td_api::messageSchedulingStateSendAtDate::ID) {
+    auto scheduling_state = move_object_as<td_api::messageSchedulingStateSendAtDate>(message->scheduling_state_);
+    message_info->scheduled_at = scheduling_state->send_date_;
+  }
 
   message_info->author_signature = std::move(message->author_signature_);
 
@@ -10019,13 +10080,24 @@ td::int32 Client::get_unix_time() const {
 }
 
 td::int64 Client::as_tdlib_message_id(int32 message_id) {
-  return static_cast<int64>(message_id) << 20;
+  if (message_id >= 0) {
+    return static_cast<int64>(message_id) << 20;
+  } else {
+    return static_cast<int64>((-message_id) << 3) + 4;
+  }
 }
 
 td::int32 Client::as_client_message_id(int64 message_id) {
   int32 result = static_cast<int32>(message_id >> 20);
   CHECK(as_tdlib_message_id(result) == message_id);
   return result;
+}
+
+td::int32 Client::as_scheduled_message_id(int64 message_id) {
+  // scheduled message ID layout
+  // |-------30-------|----18---|1|--2-|
+  // |send_date-2**30 |server_id|1|type|
+  return -static_cast<int32>((message_id >> 3) & ((1 << 18) - 1));
 }
 
 td::int64 Client::get_supergroup_chat_id(int32 supergroup_id) {
