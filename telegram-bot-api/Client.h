@@ -41,10 +41,6 @@ class Client : public WebhookActor::Callback {
   Client(td::ActorShared<> parent, const td::string &bot_token, bool is_user, bool is_test_dc, td::int64 tqueue_id,
          std::shared_ptr<const ClientParameters> parameters, td::ActorId<BotStatActor> stat_actor);
 
-  Client(td::ActorShared<> parent, const td::string &bot_token, const td::string &phone_number, bool is_user,
-         bool is_test_dc, td::int64 tqueue_id, std::shared_ptr<const ClientParameters> parameters,
-         td::ActorId<BotStatActor> stat_actor);
-
   void send(PromisedQueryPtr query) override;
 
   void close();
@@ -160,6 +156,7 @@ class Client : public WebhookActor::Callback {
   class JsonStickerSet;
   class JsonCallbackQueryAnswer;
   class JsonCustomJson;
+  class JsonAuthorizationState;
 
   class TdOnOkCallback;
   class TdOnAuthorizationCallback;
@@ -554,6 +551,7 @@ class Client : public WebhookActor::Callback {
   Status process_edit_message_scheduling_query(PromisedQueryPtr &query);
 
   //custom auth methods
+  void process_auth_phone_number_query(PromisedQueryPtr &query);
   void process_authcode_query(PromisedQueryPtr &query);
   void process_2fapassword_query(PromisedQueryPtr &query);
   void process_register_user_query(PromisedQueryPtr &query);
@@ -894,7 +892,6 @@ class Client : public WebhookActor::Callback {
   td::string bot_token_;
   td::string bot_token_with_dc_;
   td::string bot_token_id_;
-  td::string phone_number_;
   bool is_user_;
   bool is_test_dc_;
   int64 tqueue_id_;

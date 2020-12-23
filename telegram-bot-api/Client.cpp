@@ -192,25 +192,6 @@ Client::Client(td::ActorShared<> parent, const td::string &bot_token, bool is_us
   CHECK(is_inited);
 }
 
-Client::Client(td::ActorShared<> parent, const td::string &bot_token, const td::string &phone_number, bool is_user,
-               bool is_test_dc, int64 tqueue_id, std::shared_ptr<const ClientParameters> parameters,
-               td::ActorId<BotStatActor> stat_actor)
-    : parent_(std::move(parent))
-    , bot_token_(bot_token)
-    , bot_token_id_("<unknown>")
-    , phone_number_(phone_number)
-    , is_user_(is_user)
-    , is_test_dc_(is_test_dc)
-    , tqueue_id_(tqueue_id)
-    , parameters_(std::move(parameters))
-    , stat_actor_(std::move(stat_actor)) {
-  messages_lru_root_.lru_next = &messages_lru_root_;
-  messages_lru_root_.lru_prev = &messages_lru_root_;
-
-  static auto is_inited = init_methods();
-  CHECK(is_inited);
-}
-
 bool Client::init_methods() {
   methods_.emplace("getme", &Client::process_get_me_query);
   methods_.emplace("getmycommands", &Client::process_get_my_commands_query);
@@ -2423,6 +2404,57 @@ class Client::JsonCallbackQueryAnswer : public Jsonable {
   const td_api::callbackQueryAnswer *answer_;
 };
 
+class Client::JsonAuthorizationState : public Jsonable {
+  public:
+    JsonAuthorizationState(const td_api::AuthorizationState *state, td::string token = "") : state_(state), token_(token) {
+    }
+
+    void store(JsonValueScope *scope) const {
+      auto object = scope->enter_object();
+      if (!token_.empty()) {
+        object("token", token_);
+      }
+      if (state_ == nullptr) {
+        object("authorization_state", "unknown");
+        return;
+      }
+      switch (state_->get_id())
+      {
+      case td_api::authorizationStateWaitCode::ID: {
+        object("authorization_state", "wait_code");
+        auto state_code = static_cast<const td_api::authorizationStateWaitCode*>(state_);
+        if (state_code != nullptr && state_code->code_info_ != nullptr) {
+          object("timeout", state_code->code_info_->timeout_);
+        }
+        break;
+      }
+      case td_api::authorizationStateWaitPassword::ID: {
+        object("authorization_state", "wait_password");
+        auto state_password = static_cast<const td_api::authorizationStateWaitPassword*>(state_);
+        if (state_password != nullptr) {
+          object("password_hint", state_password->password_hint_);
+          object("has_recovery_email_address", td::JsonBool(state_password->has_recovery_email_address_));
+        }
+        break;
+      }
+      case td_api::authorizationStateWaitRegistration::ID:
+        object("authorization_state", "wait_registration");
+        break;
+      case td_api::authorizationStateReady::ID:
+        object("authorization_state", "ready");
+        break;
+      
+      default:
+        object("authorization_state", "unknown");
+        break;
+      }
+    }
+
+  private:
+    const td_api::AuthorizationState *state_;
+    const td::string token_;
+};
+
 
 class Client::TdOnOkCallback : public TdQueryCallback {
  public:
@@ -2466,8 +2498,8 @@ class Client::TdOnAuthorizationCallback : public TdQueryCallback {
 
 class Client::TdOnAuthorizationQueryCallback : public TdQueryCallback {
  public:
-  TdOnAuthorizationQueryCallback(Client *client, PromisedQueryPtr query) :
-      client_(client), query_(std::move(query)) {
+  TdOnAuthorizationQueryCallback(Client *client, PromisedQueryPtr query, bool send_token = false)
+      : client_(client), query_(std::move(query)), send_token_(send_token) {
   }
 
   void on_result(object_ptr<td_api::Object> result) override {
@@ -2486,14 +2518,20 @@ class Client::TdOnAuthorizationQueryCallback : public TdQueryCallback {
       LOG(WARNING) << "Logging out due to " << td::oneline(to_string(error));
       client_->log_out();
     } else {
-      answer_query(td::JsonTrue(), std::move(query_));
-      client_->on_update_authorization_state();
+      if (send_token_) {
+        answer_query(JsonAuthorizationState(client_->authorization_state_.get(), client_->bot_token_), std::move(query_));
+
+      } else {
+        answer_query(JsonAuthorizationState(client_->authorization_state_.get()), std::move(query_));
+      }
+      // client_->on_update_authorization_state();
     }
   }
 
  private:
   Client *client_;
   PromisedQueryPtr query_;
+  bool send_token_;
 };
 
 class Client::TdOnInitCallback : public TdQueryCallback {
@@ -3429,7 +3467,7 @@ class Client::TdOnPingCallback : public TdQueryCallback {
     CHECK(result->get_id() == td_api::seconds::ID);
 
     auto seconds_ = move_object_as<td_api::seconds>(result);
-    answer_query(td::VirtuallyJsonableString(std::to_string(seconds_->seconds_)), std::move(query_));
+    answer_query(seconds_->seconds_, std::move(query_));
   }
 
  private:
@@ -4272,8 +4310,8 @@ void Client::on_update_authorization_state() {
       return send_request(make_object<td_api::checkDatabaseEncryptionKey>(), std::make_unique<TdOnInitCallback>(this));
     case td_api::authorizationStateWaitPhoneNumber::ID:
       if (is_user_) {
-        return send_request(make_object<td_api::setAuthenticationPhoneNumber>(phone_number_, nullptr),
-                            std::make_unique<TdOnAuthorizationCallback>(this));
+        waiting_for_auth_input_ = true;
+        return loop();
       } else {
         return send_request(make_object<td_api::checkAuthenticationBotToken>(bot_token_),
                             std::make_unique<TdOnAuthorizationCallback>(this));
@@ -6489,7 +6527,9 @@ void Client::on_cmd(PromisedQueryPtr query) {
     }
   }
   if (waiting_for_auth_input_) {
-    if (query->method() == "authcode") {
+    if (query->method().empty()) {
+      return process_auth_phone_number_query(query);
+    } else if (query->method() == "authcode") {
       return process_authcode_query(query);
     } else if (query->method() == "2fapassword" || query->method() == "authpassword") {
       return process_2fapassword_query(query);
@@ -8278,6 +8318,24 @@ td::Status Client::process_edit_message_scheduling_query(PromisedQueryPtr &query
 //end custom user methods impl
 //start custom auth methods impl
 
+void Client::process_auth_phone_number_query(PromisedQueryPtr &query) {
+    td::MutableSlice r_phone_number = query->arg("phone_number");
+  if (r_phone_number.size() < 5 || r_phone_number.size() > 15) {
+    return fail_query(401, "Unauthorized: invalid phone number specified", std::move(query));
+  }
+  td::int64 phone_number = 0;
+  for (char const &c: r_phone_number) {
+    if (isdigit(c)) {
+      phone_number = phone_number * 10 + (c - 48);
+    }
+  }
+  if (authorization_state_->get_id() != td_api::authorizationStateWaitPhoneNumber::ID) {
+    return fail_query(400, "Bad Request: currently not waiting for a phone_number", std::move(query));
+  }
+  send_request(make_object<td_api::setAuthenticationPhoneNumber>(td::to_string(phone_number), nullptr),
+               std::make_unique<TdOnAuthorizationQueryCallback>(this, std::move(query), true));
+}
+
 void Client::process_authcode_query(PromisedQueryPtr &query) {
   auto code = query->arg("code");
   if (code.empty()) {
@@ -9896,8 +9954,7 @@ Client::FullMessageId Client::add_message(object_ptr<td_api::message> &&message,
     message_info->forwards = message->interaction_info_->forward_count_;
   }
   message_info->is_scheduled = message->scheduling_state_!=nullptr;
-  if (message->scheduling_state_ != nullptr &&
-      message->scheduling_state_->get_id() == td_api::messageSchedulingStateSendAtDate::ID) {
+  if (message->scheduling_state_!=nullptr && message->scheduling_state_->get_id() == td_api::messageSchedulingStateSendAtDate::ID) {
     auto scheduling_state = move_object_as<td_api::messageSchedulingStateSendAtDate>(message->scheduling_state_);
     message_info->scheduled_at = scheduling_state->send_date_;
   }
@@ -10089,7 +10146,7 @@ td::int64 Client::as_tdlib_message_id(int32 message_id) {
 
 td::int32 Client::as_client_message_id(int64 message_id) {
   int32 result = static_cast<int32>(message_id >> 20);
-  CHECK(as_tdlib_message_id(result) == message_id);
+  CHECK(as_tdlib_message_id(result) >> 2 == message_id >> 2);
   return result;
 }
 
