@@ -754,42 +754,6 @@ class Client::JsonChat : public Jsonable {
   int32 distance_;
 };
 
-class Client::JsonChats : public Jsonable {
- public:
-  JsonChats(const object_ptr<td_api::chats> &chats, const Client *client) : chats_(chats), client_(client) {
-  }
-  void store(JsonValueScope *scope) const {
-    auto array = scope->enter_array();
-    for (auto &chat : chats_->chat_ids_) {
-      array << JsonChat(chat, false, client_);
-    }
-  }
-
- private:
-  const object_ptr<td_api::chats> &chats_;
-  const Client *client_;
-};
-
-class Client::JsonChatsNearby : public Jsonable {
- public:
-  JsonChatsNearby(const object_ptr<td_api::chatsNearby> &chats_nearby, const Client *client)
-      : chats_nearby_(chats_nearby), client_(client) {
-  }
-  void store(JsonValueScope *scope) const {
-    auto array = scope->enter_array();
-    for (auto &chat : chats_nearby_->users_nearby_) {
-      array << JsonChat(chat->chat_id_, false, client_, -1, chat->distance_);
-    }
-    for (auto &chat : chats_nearby_->supergroups_nearby_) {
-      array << JsonChat(chat->chat_id_, false, client_, -1, chat->distance_);
-    }
-  }
-
- private:
-  const object_ptr<td_api::chatsNearby> &chats_nearby_;
-  const Client *client_;
-};
-
 class Client::JsonMessageSender : public Jsonable {
  public:
   JsonMessageSender(const td_api::MessageSender *sender, const Client *client) : sender_(sender), client_(client) {
@@ -830,24 +794,6 @@ class Client::JsonMessages : public Jsonable {
 
  private:
   const td::vector<td::string> &messages_;
-};
-
-class Client::JsonMessages_ : public Jsonable {
- public:
-  explicit JsonMessages_(object_ptr<td_api::messages> &messages, Client *client) : messages_(messages), client_(client) {
-  }
-  void store(JsonValueScope *scope) const {
-    auto array = scope->enter_array();
-    for (auto &message : messages_->messages_) {
-      auto full_message_id = client_->add_message(std::move(message));
-      const MessageInfo *m = client_->get_message(full_message_id.chat_id, full_message_id.message_id);
-      array << JsonMessage(m, true, "search", client_);
-    }
-  }
-
- private:
-  object_ptr<td_api::messages> &messages_;
-  Client *client_;
 };
 
 class Client::JsonAnimation : public Jsonable {
@@ -2388,21 +2334,7 @@ class Client::JsonStickerSet : public Jsonable {
   const Client *client_;
 };
 
-class Client::JsonCallbackQueryAnswer : public Jsonable {
- public:
-  JsonCallbackQueryAnswer(const td_api::callbackQueryAnswer *answer) : answer_(answer) {
-  }
-
-  void store(JsonValueScope *scope) const {
-    auto object = scope->enter_object();
-    object("text", answer_->text_);
-    object("show_alert", td::JsonBool(answer_->show_alert_));
-    object("url", answer_->url_);
-  }
-
- private:
-  const td_api::callbackQueryAnswer *answer_;
-};
+// start custom Json objects impl
 
 class Client::JsonAuthorizationState : public Jsonable {
  public:
@@ -2456,6 +2388,78 @@ class Client::JsonAuthorizationState : public Jsonable {
   const td_api::AuthorizationState *state_;
   const td::string token_;
 };
+
+class Client::JsonCallbackQueryAnswer : public Jsonable {
+ public:
+  JsonCallbackQueryAnswer(const td_api::callbackQueryAnswer *answer) : answer_(answer) {
+  }
+
+  void store(JsonValueScope *scope) const {
+    auto object = scope->enter_object();
+    object("text", answer_->text_);
+    object("show_alert", td::JsonBool(answer_->show_alert_));
+    object("url", answer_->url_);
+  }
+
+ private:
+  const td_api::callbackQueryAnswer *answer_;
+};
+
+class Client::JsonChats : public Jsonable {
+ public:
+  JsonChats(const object_ptr<td_api::chats> &chats, const Client *client) : chats_(chats), client_(client) {
+  }
+  void store(JsonValueScope *scope) const {
+    auto array = scope->enter_array();
+    for (auto &chat : chats_->chat_ids_) {
+      array << JsonChat(chat, false, client_);
+    }
+  }
+
+ private:
+  const object_ptr<td_api::chats> &chats_;
+  const Client *client_;
+};
+
+class Client::JsonChatsNearby : public Jsonable {
+ public:
+  JsonChatsNearby(const object_ptr<td_api::chatsNearby> &chats_nearby, const Client *client)
+      : chats_nearby_(chats_nearby), client_(client) {
+  }
+  void store(JsonValueScope *scope) const {
+    auto array = scope->enter_array();
+    for (auto &chat : chats_nearby_->users_nearby_) {
+      array << JsonChat(chat->chat_id_, false, client_, -1, chat->distance_);
+    }
+    for (auto &chat : chats_nearby_->supergroups_nearby_) {
+      array << JsonChat(chat->chat_id_, false, client_, -1, chat->distance_);
+    }
+  }
+
+ private:
+  const object_ptr<td_api::chatsNearby> &chats_nearby_;
+  const Client *client_;
+};
+
+class Client::JsonMessagesArray : public Jsonable {
+ public:
+  explicit JsonMessagesArray(object_ptr<td_api::messages> &messages, Client *client) : messages_(messages), client_(client) {
+  }
+  void store(JsonValueScope *scope) const {
+    auto array = scope->enter_array();
+    for (auto &message : messages_->messages_) {
+      auto full_message_id = client_->add_message(std::move(message));
+      const MessageInfo *m = client_->get_message(full_message_id.chat_id, full_message_id.message_id);
+      array << JsonMessage(m, true, "search", client_);
+    }
+  }
+
+ private:
+  object_ptr<td_api::messages> &messages_;
+  Client *client_;
+};
+
+//end custom Json objects impl
 
 class Client::TdOnOkCallback : public TdQueryCallback {
  public:
@@ -3542,9 +3546,9 @@ class Client::TdOnGetChatsNearbyCallback : public TdQueryCallback {
   PromisedQueryPtr query_;
 };
 
-class Client::TdOnJoinChatIdCallback : public TdQueryCallback {
+class Client::TdOnJoinChatCallback : public TdQueryCallback {
  public:
-  explicit TdOnJoinChatIdCallback(Client *client, PromisedQueryPtr query, int64 chat_id)
+  explicit TdOnJoinChatCallback(Client *client, PromisedQueryPtr query, int64 chat_id)
       : client_(client), query_(std::move(query)), chat_id_(chat_id) {
   }
 
@@ -3597,7 +3601,7 @@ class Client::TdOnReturnMessagesCallback : public TdQueryCallback {
     CHECK(result->get_id() == td_api::messages::ID);
 
     auto messages = move_object_as<td_api::messages>(result);
-    answer_query(JsonMessages_(messages, client_), std::move(query_));
+    answer_query(JsonMessagesArray(messages, client_), std::move(query_));
   }
 
  private:
@@ -6234,18 +6238,6 @@ td::Result<td::vector<td_api::object_ptr<td_api::InputMessageContent>>> Client::
   return std::move(contents);
 }
 
-td::Result<td_api::object_ptr<td_api::MessageSchedulingState>> Client::get_message_scheduling_state(const Query *query) {
-  auto send_at = trim(query->arg("send_at"));
-  if (send_at.empty()) {
-    return nullptr;
-  } else if (send_at == "online") {
-    return make_object<td_api::messageSchedulingStateSendWhenOnline>();
-  } else {
-    TRY_RESULT(send_at_date, td::to_integer_safe<td::int32>(send_at));
-    return make_object<td_api::messageSchedulingStateSendAtDate>(send_at_date);
-  }
-}
-
 td::Result<td::vector<td::string>> Client::get_poll_options(const Query *query) {
   auto input_options = query->arg("options");
   LOG(INFO) << "Parsing JSON object: " << input_options;
@@ -6270,35 +6262,6 @@ td::Result<td::vector<td::string>> Client::get_poll_options(const Query *query) 
   return std::move(options);
 }
 
-template <class T>
-td::Result<td::vector<T>> Client::get_int_array_arg(const Query *query, Slice field_name, bool optional) {
-  auto input_options = query->arg(field_name);
-  if (input_options.empty() && optional) {
-    td::vector<T> array;
-    return std::move(array);
-  }
-  LOG(INFO) << "Parsing JSON object: " << input_options;
-  auto r_value = json_decode(input_options);
-  if (r_value.is_error()) {
-    LOG(INFO) << "Can't parse JSON object: " << r_value.error();
-    return Status::Error(400, "Can't parse option_ids JSON object");
-  }
-
-  auto value = r_value.move_as_ok();
-  if (value.type() != JsonValue::Type::Array) {
-    return Status::Error(400, "Expected an Array of Integer as options");
-  }
-
-  td::vector<T> array;
-  for (auto &element : value.get_array()) {
-    if (element.type() != JsonValue::Type::Number) {
-      return Status::Error(400, "Expected an elements to be of type Integer");
-    }
-    array.push_back(td::to_integer_safe<T>(element.get_number()).move_as_ok());
-  }
-  return std::move(array);
-}
-
 td::int32 Client::get_integer_arg(const Query *query, Slice field_name, int32 default_value, int32 min_value,
                                   int32 max_value) {
   auto s_arg = query->arg(field_name);
@@ -6307,16 +6270,6 @@ td::int32 Client::get_integer_arg(const Query *query, Slice field_name, int32 de
   }
 
   return td::clamp(td::to_integer<int32>(s_arg), min_value, max_value);
-}
-
-td::int64 Client::get_int64_arg (const Query *query, Slice field_name, int64 default_value, int64 min_value,
-                                 int64 max_value) {
-  auto s_arg = query->arg(field_name);
-  if (s_arg.empty()) {
-    return default_value;
-  }
-
-  return td::clamp(td::to_integer<int64>(s_arg), min_value, max_value);
 }
 
 td::Result<td::MutableSlice> Client::get_required_string_arg(const Query *query, Slice field_name) {
@@ -6357,6 +6310,86 @@ td::Result<td::int32> Client::get_user_id(const Query *query, Slice field_name) 
   return user_id;
 }
 
+td::int64 Client::extract_yet_unsent_message_query_id(int64 chat_id, int64 message_id,
+                                                      bool *is_reply_to_message_deleted) {
+  auto yet_unsent_message_it = yet_unsent_messages_.find({chat_id, message_id});
+  CHECK(yet_unsent_message_it != yet_unsent_messages_.end());
+
+  auto reply_to_message_id = yet_unsent_message_it->second.reply_to_message_id;
+  if (is_reply_to_message_deleted != nullptr && yet_unsent_message_it->second.is_reply_to_message_deleted) {
+    *is_reply_to_message_deleted = true;
+  }
+  auto query_id = yet_unsent_message_it->second.send_message_query_id;
+
+  yet_unsent_messages_.erase(yet_unsent_message_it);
+
+  if (reply_to_message_id > 0) {
+    auto it = yet_unsent_reply_message_ids_.find({chat_id, reply_to_message_id});
+    CHECK(it != yet_unsent_reply_message_ids_.end());
+    auto erased_count = it->second.erase(message_id);
+    CHECK(erased_count > 0);
+    if (it->second.empty()) {
+      yet_unsent_reply_message_ids_.erase(it);
+    }
+  }
+
+  return query_id;
+}
+
+// start custom helper methods impl
+
+td::Result<td_api::object_ptr<td_api::MessageSchedulingState>> Client::get_message_scheduling_state(
+    const Query *query) {
+  auto send_at = trim(query->arg("send_at"));
+  if (send_at.empty()) {
+    return nullptr;
+  } else if (send_at == "online") {
+    return make_object<td_api::messageSchedulingStateSendWhenOnline>();
+  } else {
+    TRY_RESULT(send_at_date, td::to_integer_safe<td::int32>(send_at));
+    return make_object<td_api::messageSchedulingStateSendAtDate>(send_at_date);
+  }
+}
+
+template <class T>
+td::Result<td::vector<T>> Client::get_int_array_arg(const Query *query, Slice field_name, bool optional) {
+  auto input_options = query->arg(field_name);
+  if (input_options.empty() && optional) {
+    td::vector<T> array;
+    return std::move(array);
+  }
+  LOG(INFO) << "Parsing JSON object: " << input_options;
+  auto r_value = json_decode(input_options);
+  if (r_value.is_error()) {
+    LOG(INFO) << "Can't parse JSON object: " << r_value.error();
+    return Status::Error(400, "Can't parse option_ids JSON object");
+  }
+
+  auto value = r_value.move_as_ok();
+  if (value.type() != JsonValue::Type::Array) {
+    return Status::Error(400, "Expected an Array of Integer as options");
+  }
+
+  td::vector<T> array;
+  for (auto &element : value.get_array()) {
+    if (element.type() != JsonValue::Type::Number) {
+      return Status::Error(400, "Expected an elements to be of type Integer");
+    }
+    array.push_back(td::to_integer_safe<T>(element.get_number()).move_as_ok());
+  }
+  return std::move(array);
+}
+
+td::int64 Client::get_int64_arg(const Query *query, Slice field_name, int64 default_value, int64 min_value,
+                                int64 max_value) {
+  auto s_arg = query->arg(field_name);
+  if (s_arg.empty()) {
+    return default_value;
+  }
+
+  return td::clamp(td::to_integer<int64>(s_arg), min_value, max_value);
+}
+
 td::Result<td_api::object_ptr<td_api::ChatReportReason>> Client::get_report_reason(const Query *query,
                                                                                    Slice field_name) {
   auto reason = query->arg(field_name);
@@ -6382,7 +6415,7 @@ td::Result<td_api::object_ptr<td_api::ChatReportReason>> Client::get_report_reas
 }
 
 td::Result<td_api::object_ptr<td_api::SearchMessagesFilter>> Client::get_search_messages_filter(const Query *query,
-                                                                                   Slice field_name) {
+                                                                                                Slice field_name) {
   auto filter = query->arg(field_name);
   object_ptr<td_api::SearchMessagesFilter> result;
   if (filter.empty()) {
@@ -6427,31 +6460,7 @@ td::Result<td_api::object_ptr<td_api::SearchMessagesFilter>> Client::get_search_
   return std::move(result);
 }
 
-td::int64 Client::extract_yet_unsent_message_query_id(int64 chat_id, int64 message_id,
-                                                      bool *is_reply_to_message_deleted) {
-  auto yet_unsent_message_it = yet_unsent_messages_.find({chat_id, message_id});
-  CHECK(yet_unsent_message_it != yet_unsent_messages_.end());
-
-  auto reply_to_message_id = yet_unsent_message_it->second.reply_to_message_id;
-  if (is_reply_to_message_deleted != nullptr && yet_unsent_message_it->second.is_reply_to_message_deleted) {
-    *is_reply_to_message_deleted = true;
-  }
-  auto query_id = yet_unsent_message_it->second.send_message_query_id;
-
-  yet_unsent_messages_.erase(yet_unsent_message_it);
-
-  if (reply_to_message_id > 0) {
-    auto it = yet_unsent_reply_message_ids_.find({chat_id, reply_to_message_id});
-    CHECK(it != yet_unsent_reply_message_ids_.end());
-    auto erased_count = it->second.erase(message_id);
-    CHECK(erased_count > 0);
-    if (it->second.empty()) {
-      yet_unsent_reply_message_ids_.erase(it);
-    }
-  }
-
-  return query_id;
-}
+// end custom helper methods impl
 
 void Client::on_message_send_succeeded(object_ptr<td_api::message> &&message, int64 old_message_id) {
   auto full_message_id = add_message(std::move(message), true);
@@ -8166,7 +8175,7 @@ td::Status Client::process_join_chat_query(PromisedQueryPtr &query) {
   if (!chat_id.empty()) {
     check_chat(chat_id, AccessRights::Read, std::move(query), [this](int64 chat_id, PromisedQueryPtr query) {
       send_request(make_object<td_api::joinChat>(chat_id),
-                   std::make_unique<TdOnJoinChatIdCallback>(this, std::move(query), chat_id));
+                   std::make_unique<TdOnJoinChatCallback>(this, std::move(query), chat_id));
     });
   } else if (!invite_link.empty()) {
     send_request(make_object<td_api::joinChatByInviteLink>(invite_link.str()),
@@ -8228,6 +8237,8 @@ td::Status Client::process_create_chat_query(PromisedQueryPtr &query) {
     TRY_RESULT(initial_members, get_int_array_arg<td::int32>(query.get(), "user_ids"))
     send_request(make_object<td_api::createNewBasicGroupChat>(std::move(initial_members), title.str()),
                  std::make_unique<TdOnReturnChatCallback>(this, std::move(query)));
+  } else {
+    return Status::Error(400, "Chat type is not specified");
   }
   return Status::OK();
 }
@@ -8301,11 +8312,10 @@ td::Status Client::process_delete_chat_history_query(PromisedQueryPtr &query) {
 td::Status Client::process_get_scheduled_messages_query(PromisedQueryPtr &query) {
   CHECK_IS_USER();
   auto chat_id = query->arg("chat_id");
-  check_chat(chat_id, AccessRights::Read, std::move(query),
-             [this](int64 chat_id, PromisedQueryPtr query) mutable {
-               send_request(make_object<td_api::getChatScheduledMessages>(chat_id),
-                            std::make_unique<TdOnReturnMessagesCallback>(this, std::move(query)));
-             });
+  check_chat(chat_id, AccessRights::Read, std::move(query), [this](int64 chat_id, PromisedQueryPtr query) mutable {
+    send_request(make_object<td_api::getChatScheduledMessages>(chat_id),
+                 std::make_unique<TdOnReturnMessagesCallback>(this, std::move(query)));
+  });
   return Status::OK();
 }
 
@@ -8326,12 +8336,12 @@ td::Status Client::process_edit_message_scheduling_query(PromisedQueryPtr &query
 //start custom auth methods impl
 
 void Client::process_auth_phone_number_query(PromisedQueryPtr &query) {
-    td::MutableSlice r_phone_number = query->arg("phone_number");
+  td::MutableSlice r_phone_number = query->arg("phone_number");
   if (r_phone_number.size() < 5 || r_phone_number.size() > 15) {
     return fail_query(401, "Unauthorized: invalid phone number specified", std::move(query));
   }
   td::int64 phone_number = 0;
-  for (char const &c: r_phone_number) {
+  for (char const &c : r_phone_number) {
     if (isdigit(c)) {
       phone_number = phone_number * 10 + (c - 48);
     }
