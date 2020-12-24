@@ -2405,34 +2405,36 @@ class Client::JsonCallbackQueryAnswer : public Jsonable {
 };
 
 class Client::JsonAuthorizationState : public Jsonable {
-  public:
-    JsonAuthorizationState(const td_api::AuthorizationState *state, td::string token = "") : state_(state), token_(token) {
-    }
+ public:
+  JsonAuthorizationState(const td_api::AuthorizationState *state, td::string token = "")
+      : state_(state), token_(token) {
+  }
 
-    void store(JsonValueScope *scope) const {
-      auto object = scope->enter_object();
-      if (!token_.empty()) {
-        object("token", token_);
-      }
-      if (state_ == nullptr) {
-        object("authorization_state", "unknown");
-        return;
-      }
-      switch (state_->get_id())
-      {
+  void store(JsonValueScope *scope) const {
+    auto object = scope->enter_object();
+    if (!token_.empty()) {
+      object("token", token_);
+    }
+    if (state_ == nullptr) {
+      object("authorization_state", "unknown");
+      return;
+    }
+    switch (state_->get_id()) {
       case td_api::authorizationStateWaitCode::ID: {
         object("authorization_state", "wait_code");
-        auto state_code = static_cast<const td_api::authorizationStateWaitCode*>(state_);
-        if (state_code != nullptr && state_code->code_info_ != nullptr) {
+        auto state_code = static_cast<const td_api::authorizationStateWaitCode *>(state_);
+        if (state_code != nullptr && state_code->code_info_ != nullptr && state_code->code_info_->timeout_ != 0) {
           object("timeout", state_code->code_info_->timeout_);
         }
         break;
       }
       case td_api::authorizationStateWaitPassword::ID: {
         object("authorization_state", "wait_password");
-        auto state_password = static_cast<const td_api::authorizationStateWaitPassword*>(state_);
+        auto state_password = static_cast<const td_api::authorizationStateWaitPassword *>(state_);
         if (state_password != nullptr) {
-          object("password_hint", state_password->password_hint_);
+          if (!state_password->password_hint_.empty()) {
+            object("password_hint", state_password->password_hint_);
+          }
           object("has_recovery_email_address", td::JsonBool(state_password->has_recovery_email_address_));
         }
         break;
@@ -2443,18 +2445,17 @@ class Client::JsonAuthorizationState : public Jsonable {
       case td_api::authorizationStateReady::ID:
         object("authorization_state", "ready");
         break;
-      
+
       default:
         object("authorization_state", "unknown");
         break;
-      }
     }
+  }
 
-  private:
-    const td_api::AuthorizationState *state_;
-    const td::string token_;
+ private:
+  const td_api::AuthorizationState *state_;
+  const td::string token_;
 };
-
 
 class Client::TdOnOkCallback : public TdQueryCallback {
  public:
@@ -2474,10 +2475,7 @@ class Client::TdOnAuthorizationCallback : public TdQueryCallback {
   }
 
   void on_result(object_ptr<td_api::Object> result) override {
-    bool was_ready = client_->authorization_state_->get_id() != td_api::authorizationStateWaitPhoneNumber::ID &&
-                     client_->authorization_state_->get_id() != td_api::authorizationStateWaitCode::ID &&
-                     client_->authorization_state_->get_id() != td_api::authorizationStateWaitPassword::ID &&
-                     client_->authorization_state_->get_id() != td_api::authorizationStateWaitRegistration::ID;
+    bool was_ready = client_->authorization_state_->get_id() != td_api::authorizationStateWaitPhoneNumber::ID;
     if (result->get_id() == td_api::error::ID) {
       auto error = move_object_as<td_api::error>(result);
       if (error->code_ == 429 || error->code_ >= 500 || (error->code_ != 401 && was_ready)) {
@@ -2503,15 +2501,17 @@ class Client::TdOnAuthorizationQueryCallback : public TdQueryCallback {
   }
 
   void on_result(object_ptr<td_api::Object> result) override {
-    bool was_ready = client_->authorization_state_->get_id() != td_api::authorizationStateWaitPhoneNumber::ID &&
-                     client_->authorization_state_->get_id() != td_api::authorizationStateWaitCode::ID &&
-                     client_->authorization_state_->get_id() != td_api::authorizationStateWaitPassword::ID &&
-                     client_->authorization_state_->get_id() != td_api::authorizationStateWaitRegistration::ID;
+    bool was_ready = client_->authorization_state_->get_id() != td_api::authorizationStateWaitPhoneNumber::ID;
+    bool can_retry = client_->authorization_state_->get_id() == td_api::authorizationStateWaitCode::ID ||
+                     client_->authorization_state_->get_id() == td_api::authorizationStateWaitPassword::ID ||
+                     client_->authorization_state_->get_id() == td_api::authorizationStateWaitRegistration::ID;
     if (result->get_id() == td_api::error::ID) {
       auto error = move_object_as<td_api::error>(result);
-      if (error->code_ == 429 || error->code_ >= 500 || (error->code_ != 401 && was_ready)) {
+      if (error->code_ == 429 || error->code_ >= 500 || (error->code_ != 401 && was_ready && !client_->is_user_)) {
         // try again
         return client_->on_update_authorization_state();
+      } else if (error->code_ == 400 && can_retry) {
+        return fail_query_with_error(std::move(query_), std::move(error));
       }
       fail_query(401, "Unauthorized: Log in failed, logging out due to " + td::oneline(to_string(error)),
                  std::move(query_));
@@ -2524,7 +2524,6 @@ class Client::TdOnAuthorizationQueryCallback : public TdQueryCallback {
       } else {
         answer_query(JsonAuthorizationState(client_->authorization_state_.get()), std::move(query_));
       }
-      // client_->on_update_authorization_state();
     }
   }
 
