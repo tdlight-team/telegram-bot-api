@@ -97,8 +97,6 @@ class Client : public WebhookActor::Callback {
   class JsonChatPhotoInfo;
   class JsonChatLocation;
   class JsonChat;
-  class JsonChats;
-  class JsonChatsNearby;
   class JsonMessageSender;
   class JsonAnimation;
   class JsonAudio;
@@ -130,7 +128,6 @@ class Client : public WebhookActor::Callback {
   class JsonReplyMarkup;
   class JsonMessage;
   class JsonMessages;
-  class JsonMessages_;
   class JsonDeletedMessage;
   class JsonMessageId;
   class JsonInlineQuery;
@@ -154,9 +151,15 @@ class Client : public WebhookActor::Callback {
   class JsonUpdateTypes;
   class JsonWebhookInfo;
   class JsonStickerSet;
-  class JsonCallbackQueryAnswer;
   class JsonCustomJson;
+
+  //start custom Json objects
   class JsonAuthorizationState;
+  class JsonCallbackQueryAnswer;
+  class JsonChats;
+  class JsonChatsNearby;
+  class JsonMessagesArray;
+  //stop custom Json objects
 
   class TdOnOkCallback;
   class TdOnAuthorizationCallback;
@@ -195,7 +198,7 @@ class Client : public WebhookActor::Callback {
   class TdOnGetMemoryStatisticsCallback;
   class TdOnGetChatsCallback;
   class TdOnGetChatsNearbyCallback;
-  class TdOnJoinChatIdCallback;
+  class TdOnJoinChatCallback;
   class TdOnReturnChatCallback;
   class TdOnReturnMessagesCallback;
   class TdOnGetCallbackQueryAnswerCallback;
