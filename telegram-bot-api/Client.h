@@ -416,20 +416,11 @@ class Client : public WebhookActor::Callback {
 
   static object_ptr<td_api::messageSendOptions> get_message_send_options(bool disable_notification, object_ptr<td_api::MessageSchedulingState> &&scheduling_state);
 
-  static td::Result<object_ptr<td_api::MessageSchedulingState>> get_message_scheduling_state(const Query *query);
-
   static td::Result<td::vector<td::string>> get_poll_options(const Query *query);
-
-  template <class T>
-  static td::Result<td::vector<T>> get_int_array_arg(const Query *query, Slice field_name, bool optional = false);
 
   static int32 get_integer_arg(const Query *query, Slice field_name, int32 default_value,
                                int32 min_value = std::numeric_limits<int32>::min(),
                                int32 max_value = std::numeric_limits<int32>::max());
-
-  static int64 get_int64_arg(const Query *query, Slice field_name, int64 default_value,
-                             int64 min_value = std::numeric_limits<int64>::min(),
-                             int64 max_value = std::numeric_limits<int64>::max());
 
   static td::Result<td::MutableSlice> get_required_string_arg(const Query *query, Slice field_name);
 
@@ -439,12 +430,25 @@ class Client : public WebhookActor::Callback {
 
   static td::Result<int32> get_user_id(const Query *query, Slice field_name = Slice("user_id"));
 
-  static td::Result<td_api::object_ptr<td_api::ChatReportReason>> get_report_reason(const Query *query, Slice field_name = Slice("reason"));
+  int64 extract_yet_unsent_message_query_id(int64 chat_id, int64 message_id, bool *is_reply_to_message_deleted);
+  
+  // start custom helper methods
+
+  static td::Result<object_ptr<td_api::MessageSchedulingState>> get_message_scheduling_state(const Query *query);
+
+  template <class T>
+  static td::Result<td::vector<T>> get_int_array_arg(const Query *query, Slice field_name, bool optional = false);
+
+  static int64 get_int64_arg(const Query *query, Slice field_name, int64 default_value,
+                             int64 min_value = std::numeric_limits<int64>::min(),
+                             int64 max_value = std::numeric_limits<int64>::max());
+  static td::Result<td_api::object_ptr<td_api::ChatReportReason>> get_report_reason(const Query *query,
+                                                                                    Slice field_name = Slice("reason"));
 
   static td::Result<td_api::object_ptr<td_api::SearchMessagesFilter>> get_search_messages_filter(
       const Query *query, Slice field_name = Slice("filter"));
 
-  int64 extract_yet_unsent_message_query_id(int64 chat_id, int64 message_id, bool *is_reply_to_message_deleted);
+  // end custom helper methods
 
   void on_message_send_succeeded(object_ptr<td_api::message> &&message, int64 old_message_id);
   void on_message_send_failed(int64 chat_id, int64 old_message_id, int64 new_message_id, Status result);
