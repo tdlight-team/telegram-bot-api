@@ -370,12 +370,16 @@ class Client::JsonUser : public Jsonable {
     if (user_info != nullptr && !user_info->language_code.empty()) {
       object("language_code", user_info->language_code);
     }
+
+    // start custom properties impl
     if (user_info != nullptr && user_info->is_verified) {
       object("is_verified", td::JsonBool(user_info->is_verified));
     }
     if (user_info != nullptr && user_info->is_scam) {
       object("is_scam", td::JsonBool(user_info->is_scam));
     }
+    //end custom properties impl
+
     if (is_bot && full_bot_info_) {
       object("can_join_groups", td::JsonBool(user_info->can_join_groups));
       object("can_read_all_group_messages", td::JsonBool(user_info->can_read_all_group_messages));
@@ -633,12 +637,16 @@ class Client::JsonChat : public Jsonable {
           object("username", user_info->username);
         }
         object("type", "private");
+
+        // start custom properties impl
         if (user_info->is_verified) {
           object("is_verified", td::JsonBool(user_info->is_verified));
         }
         if (user_info->is_scam) {
           object("is_scam", td::JsonBool(user_info->is_scam));
         }
+        // end custom properties impl
+
         if (is_full_) {
           if (!user_info->bio.empty()) {
             object("bio", user_info->bio);
@@ -684,12 +692,16 @@ class Client::JsonChat : public Jsonable {
         } else {
           object("type", "channel");
         }
+
+        // start custom properties impl
         if (supergroup_info->is_verified) {
           object("is_verified", td::JsonBool(supergroup_info->is_verified));
         }
         if (supergroup_info->is_scam) {
           object("is_scam", td::JsonBool(supergroup_info->is_scam));
         }
+        // end custom properties impl
+
         if (is_full_) {
           if (!supergroup_info->description.empty()) {
             object("description", supergroup_info->description);
@@ -741,9 +753,13 @@ class Client::JsonChat : public Jsonable {
         }
       }
     }
+
+    // start custom properties impl
     if (distance_ >= 0) {
       object("distance", td::JsonInt(distance_));
     }
+    // end custom properties impl
+
   }
 
  private:
@@ -8832,8 +8848,11 @@ void Client::add_user(std::unordered_map<int32, UserInfo> &users, object_ptr<td_
   user_info->last_name = user->last_name_;
   user_info->username = user->username_;
   user_info->language_code = user->language_code_;
+
+  // start custom properties
   user_info->is_verified = user->is_verified_;
   user_info->is_scam = user->is_scam_;
+  //end custom properties
 
   user_info->have_access = user->have_access_;
 
@@ -8903,8 +8922,11 @@ void Client::add_supergroup(std::unordered_map<int32, SupergroupInfo> &supergrou
   supergroup_info->status = std::move(supergroup->status_);
   supergroup_info->is_supergroup = !supergroup->is_channel_;
   supergroup_info->has_location = supergroup->has_location_;
+
+  // start custom properties
   supergroup_info->is_verified = supergroup->is_verified_;
   supergroup_info->is_scam = supergroup->is_scam_;
+  // end custom properties
 }
 
 void Client::set_supergroup_description(int32 supergroup_id, td::string &&descripton) {
