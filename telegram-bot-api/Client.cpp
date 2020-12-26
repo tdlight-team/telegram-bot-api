@@ -8242,12 +8242,13 @@ td::Status Client::process_create_chat_query(PromisedQueryPtr &query) {
   CHECK_IS_USER();
   auto chat_type = query->arg("type");
   auto title = query->arg("title");
+  auto description = query->arg("description");
 
   if (chat_type == "supergroup") {
-    send_request(make_object<td_api::createNewSupergroupChat>(title.str(), false, "", nullptr),
+    send_request(make_object<td_api::createNewSupergroupChat>(title.str(), false, description.str(), nullptr),
                  std::make_unique<TdOnReturnChatCallback>(this, std::move(query)));
   } else if (chat_type == "channel") {
-    send_request(make_object<td_api::createNewSupergroupChat>(title.str(), true, "", nullptr),
+    send_request(make_object<td_api::createNewSupergroupChat>(title.str(), true, description.str(), nullptr),
                  std::make_unique<TdOnReturnChatCallback>(this, std::move(query)));
   } else if (chat_type == "group") {
     TRY_RESULT(initial_members, get_int_array_arg<td::int32>(query.get(), "user_ids"))
