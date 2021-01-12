@@ -6,6 +6,7 @@ on:
       - master
     paths:
       - tdlight-api-openapi.yaml
+  workflow_dispatch:
       
 jobs:
   docs:
