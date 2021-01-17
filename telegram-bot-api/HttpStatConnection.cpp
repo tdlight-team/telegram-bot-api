@@ -24,8 +24,8 @@ void HttpStatConnection::handle(td::unique_ptr<td::HttpQuery> http_query,
   future.set_event(td::EventCreator::yield(actor_id()));
   LOG(DEBUG) << "SEND";
   td::Parser url_path_parser(http_query->url_path_);
-  bool as_json = url_path_parser.try_skip("/json");
-  send_closure(client_manager_, &ClientManager::get_stats, std::move(promise), http_query->get_args(), as_json);
+  as_json_ = url_path_parser.try_skip("/json");
+  send_closure(client_manager_, &ClientManager::get_stats, std::move(promise), http_query->get_args(), as_json_);
   result_ = std::move(future);
 }
 
