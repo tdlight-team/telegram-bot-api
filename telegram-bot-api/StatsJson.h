@@ -83,28 +83,6 @@ class JsonStatsMem : public td::Jsonable {
   const td::MemStat mem_stat_;
 };
 
-
-class JsonStatsCpuItem : public td::Jsonable {
- public:
-  JsonStatsCpuItem() : total_cpu_("unset"), user_cpu_("unset"), system_cpu_("unset") {
-  }
-  JsonStatsCpuItem(const td::string &total_cpu, const td::string user_cpu, const td::string system_cpu)
-      : total_cpu_(total_cpu), user_cpu_(user_cpu), system_cpu_(system_cpu) {
-  }
-  void store(td::JsonValueScope *scope) const {
-    auto object = scope->enter_object();
-    // Maybe needs td::JsonString(td::Slice(...)) instead of just a string?
-    object("total_cpu", total_cpu_);
-    object("user_cpu", user_cpu_);
-    object("system_cpu", system_cpu_);
-  }
-
-  td::string total_cpu_;
-  td::string user_cpu_;
-  td::string system_cpu_;
- private:
-};
-
 class JsonStatsCpuStat : public td::Jsonable {
  public:
   explicit JsonStatsCpuStat(const StatItem& inf, const StatItem& five_sec, const StatItem& one_min, const StatItem& one_hour) :
