@@ -123,7 +123,7 @@ class JsonStatsCpu : public td::Jsonable {
 
 class JsonStatsBot : public td::Jsonable {
  public:
-  explicit JsonStatsBot(const std::pair<td::int64, td::uint64> score_id_pair) : score_id_pair_(score_id_pair) {
+  explicit JsonStatsBot(std::pair<td::int64, td::uint64> score_id_pair) : score_id_pair_(std::move(score_id_pair)) {
   }
   void store(td::JsonValueScope *scope) const {
     auto object = scope->enter_object();
@@ -198,12 +198,12 @@ class JsonStatsBotStats : public td::Jsonable {
 
 class JsonStatsBotAdvanced : public JsonStatsBot {
  public:
-  explicit JsonStatsBotAdvanced(const std::pair<td::int64, td::uint64> score_id_pair,
+  explicit JsonStatsBotAdvanced(std::pair<td::int64, td::uint64> score_id_pair,
                                 const ServerBotInfo bot,
                                 const td::vector<ServerBotStat> stats,
                                 const bool hide_sensible_data,
                                 const double now)
-      : JsonStatsBot(score_id_pair), bot_(bot), stats_(stats), hide_sensible_data_(hide_sensible_data), now_(now) {
+      : JsonStatsBot(std::move(score_id_pair)), bot_(bot), stats_(stats), hide_sensible_data_(hide_sensible_data), now_(now) {
   }
   void store(td::JsonValueScope *scope) const {
     auto object = scope->enter_object();
