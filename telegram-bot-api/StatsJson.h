@@ -199,11 +199,12 @@ class JsonStatsBotStats : public td::Jsonable {
 class JsonStatsBotAdvanced : public JsonStatsBot {
  public:
   explicit JsonStatsBotAdvanced(std::pair<td::int64, td::uint64> score_id_pair,
-                                const ServerBotInfo bot,
-                                const td::vector<ServerBotStat> stats,
+                                ServerBotInfo bot,
+                                td::vector<ServerBotStat> stats,
                                 const bool hide_sensible_data,
                                 const double now)
-      : JsonStatsBot(std::move(score_id_pair)), bot_(bot), stats_(stats), hide_sensible_data_(hide_sensible_data), now_(now) {
+      : JsonStatsBot(std::move(score_id_pair)), bot_(std::move(bot)), stats_(std::move(stats)),
+        hide_sensible_data_(hide_sensible_data), now_(now) {
   }
   void store(td::JsonValueScope *scope) const {
     auto object = scope->enter_object();
@@ -233,8 +234,8 @@ class JsonStatsBotAdvanced : public JsonStatsBot {
     object("stats", JsonStatsBotStats(std::move(stats_)));
   }
  private:
-  const ServerBotInfo bot_;
-  const td::vector<ServerBotStat> stats_;
+  ServerBotInfo bot_;
+  td::vector<ServerBotStat> stats_;
   const bool hide_sensible_data_;
   const double now_;
 };
