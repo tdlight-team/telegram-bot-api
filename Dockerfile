@@ -30,6 +30,6 @@ RUN addgroup -g 101 -S telegram-bot-api \
  && chmod 700 ${TELEGRAM_TEMP_DIR}
 USER telegram-bot-api:telegram-bot-api
 
-HEALTHCHECK CMD nc -z localhost 8081 || exit 1
+HEALTHCHECK CMD nc -z localhost 8081
 EXPOSE 8081/tcp 8082/tcp
 ENTRYPOINT ["/docker-entrypoint.sh"]
