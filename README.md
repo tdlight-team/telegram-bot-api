@@ -1,9 +1,6 @@
 # TDLight Telegram Bot API
 The official documentation is [here](https://tdlight-team.github.io/tdlight-telegram-bot-api/).
 
-TDLight Telegram Bot API is a fork of the official Telegram Bot API, focused on memory footprint and performance.
-
-TDLight Telegram Bot API is 100% compatible with the official version.
 
 The Telegram Bot API provides an HTTP API for creating [Telegram Bots](https://core.telegram.org/bots).
 
@@ -34,16 +31,8 @@ Please note that only TDLight-specific issues are suitable for this repository.
 <a name="added-features"></a>
 ### Added features
 
-#### TDLib replaced with TDLight
-[TDLight](https://github.com/tdlight-team/tdlight) provides constant memory usage, unlike tdlib that must be restarted to reduce the heap size.
 
 <a name="added-api-methods"></a>
-#### Added API Methods
-##### Method `optimizeMemory`
-Calling `optimizeMemory` will remove old data from the in-memory cache and give the freed memory back to the os
-
-##### Method `getMemoryStats`
-Calling `getMemoryStats` will return a json containing the info about the memory manager, more info [here](https://github.com/tdlight-team/tdlight#tdapigetmemorystatistics)
 
 ##### Method `getMessageInfo`
 Get information about a message
@@ -97,6 +86,9 @@ Ping delay in seconds represented as string.
 - `(todo)`
 ##### Returns `(todo)`
 -->
+
+## And more
+see api docs [here](https://tdlight-team.github.io/tdlight-telegram-bot-api/).
 
 <a name="added-command-line-parameters"></a>
 #### Added Command Line Parameters
