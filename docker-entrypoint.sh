@@ -17,8 +17,13 @@ DEFAULT_ARGS="--http-port 8081 --dir=${TELEGRAM_WORK_DIR} --temp-dir=${TELEGRAM_
 CUSTOM_ARGS=""
 
 if [ -n "$TELEGRAM_STAT" ]; then
-  CUSTOM_ARGS="${CUSTOM_ARGS} --http-stat-port=8082"
+  CUSTOM_ARGS="${CUSTOM_ARGS} --http-stat-port=$TELEGRAM_STAT"
 fi
+
+if [ -n "$TELEGRAM_STAT_HOST" ]; then
+  CUSTOM_ARGS="${CUSTOM_ARGS} --http-stat-host=$TELEGRAM_STAT_HOST"
+fi
+
 if [ -n "$TELEGRAM_STAT_HIDE_SENSIBLE_DATA" ]; then
   CUSTOM_ARGS="${CUSTOM_ARGS} --stats-hide-sensible-data"
 fi
