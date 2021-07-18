@@ -21,7 +21,7 @@ if [ -n "$TELEGRAM_STAT" ]; then
 fi
 
 if [ -n "$TELEGRAM_STAT_HOST" ]; then
-  CUSTOM_ARGS="${CUSTOM_ARGS} --http-stat-host=$TELEGRAM_STAT_HOST"
+  CUSTOM_ARGS="${CUSTOM_ARGS} --http-stat-ip-address=$TELEGRAM_STAT_HOST"
 fi
 
 if [ -n "$TELEGRAM_STAT_HIDE_SENSIBLE_DATA" ]; then
