@@ -711,6 +711,7 @@ class Client final : public WebhookActor::Callback {
     // start custom properties
     bool is_verified = false;
     bool is_scam = false;
+    object_ptr<td_api::UserStatus> status;
     // end custom properties
 
     bool have_access = false;
@@ -723,6 +724,7 @@ class Client final : public WebhookActor::Callback {
   void set_user_photo(int64 user_id, object_ptr<td_api::chatPhoto> &&photo);
   void set_user_bio(int64 user_id, td::string &&bio);
   void set_user_has_private_forwards(int64 user_id, bool has_private_forwards);
+  void set_user_status(int64 user_id, object_ptr<td_api::UserStatus> &&status);
   UserInfo *add_user_info(int64 user_id);
   const UserInfo *get_user_info(int64 user_id) const;
 
@@ -869,6 +871,8 @@ class Client final : public WebhookActor::Callback {
                                               const td_api::chatAdministratorRights *rights, ChatType chat_type);
 
   static void json_store_permissions(td::JsonObjectScope &object, const td_api::chatPermissions *permissions);
+
+  static void json_store_user_status(td::JsonObjectScope &object, const td_api::UserStatus *userStatus);
 
   void remove_replies_to_message(int64 chat_id, int64 reply_to_message_id, bool only_from_cache);
   void delete_message(int64 chat_id, int64 message_id, bool only_from_cache);

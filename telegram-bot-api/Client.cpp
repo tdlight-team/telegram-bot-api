@@ -411,6 +411,9 @@ class Client::JsonUser final : public Jsonable {
     if (user_info != nullptr && user_info->is_scam) {
       object("is_scam", td::JsonBool(user_info->is_scam));
     }
+    if (user_info != nullptr) {
+        json_store_user_status(object, user_info->status.get());
+    }
     //end custom properties impl
 
     if (is_bot && full_bot_info_) {
@@ -715,6 +718,8 @@ class Client::JsonChat final : public Jsonable {
         if (user_info->is_scam) {
           object("is_scam", td::JsonBool(user_info->is_scam));
         }
+
+        json_store_user_status(object, user_info->status.get());
         // end custom properties impl
 
         if (is_full_) {
@@ -5267,6 +5272,12 @@ void Client::on_update(object_ptr<td_api::Object> result) {
       set_user_photo(user_id, std::move(full_info->photo_));
       set_user_bio(user_id, std::move(full_info->bio_));
       set_user_has_private_forwards(user_id, full_info->has_private_forwards_);
+      break;
+    }
+    case td_api::updateUserStatus::ID: {
+      auto update = move_object_as<td_api::updateUserStatus>(result);
+      auto user_id = update->user_id_;
+      set_user_status(user_id, std::move(update->status_));
       break;
     }
     case td_api::updateBasicGroup::ID: {
@@ -10195,6 +10206,7 @@ void Client::add_user(UserInfo *user_info, object_ptr<td_api::user> &&user) {
   // start custom properties
   user_info->is_verified = user->is_verified_;
   user_info->is_scam = user->is_scam_;
+  user_info->status = std::move(user->status_);
   //end custom properties
 
   user_info->have_access = user->have_access_;
@@ -10249,6 +10261,10 @@ void Client::set_user_bio(int64 user_id, td::string &&bio) {
 
 void Client::set_user_has_private_forwards(int64 user_id, bool has_private_forwards) {
   add_user_info(user_id)->has_private_forwards = has_private_forwards;
+}
+
+void Client::set_user_status(int64 user_id, object_ptr<td_api::UserStatus> &&status) {
+  add_user_info(user_id)->status = std::move(status);
 }
 
 void Client::add_group(GroupInfo *group_info, object_ptr<td_api::basicGroup> &&group) {
@@ -10526,6 +10542,30 @@ void Client::json_store_permissions(td::JsonObjectScope &object, const td_api::c
   object("can_change_info", td::JsonBool(permissions->can_change_info_));
   object("can_invite_users", td::JsonBool(permissions->can_invite_users_));
   object("can_pin_messages", td::JsonBool(permissions->can_pin_messages_));
+}
+
+void Client::json_store_user_status(td::JsonObjectScope &object, const td_api::UserStatus *userStatus) {
+    switch (userStatus->get_id()) {
+      case td_api::userStatusEmpty::ID:
+        object("user_status", nullptr);
+        break;
+      case td_api::userStatusLastMonth::ID:
+        object("user_status", "month");
+        break;
+      case td_api::userStatusLastWeek::ID:
+        object("user_status", "week");
+        break;
+      case td_api::userStatusOffline::ID:
+        object("user_status", "offline");
+        object("last_seen", static_cast<const td_api::userStatusOffline *>(userStatus)->was_online_);
+        break;
+      case td_api::userStatusOnline::ID:
+        object("user_status", "online");
+        break;
+      case td_api::userStatusRecently::ID:
+        object("user_status", "recently");
+        break;
+    }
 }
 
 Client::Slice Client::get_update_type_name(UpdateType update_type) {
