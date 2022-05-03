@@ -10547,7 +10547,7 @@ void Client::json_store_permissions(td::JsonObjectScope &object, const td_api::c
 void Client::json_store_user_status(td::JsonObjectScope &object, const td_api::UserStatus *userStatus) {
     switch (userStatus->get_id()) {
       case td_api::userStatusEmpty::ID:
-        object("user_status", nullptr);
+        object("user_status", "empty");
         break;
       case td_api::userStatusLastMonth::ID:
         object("user_status", "month");
