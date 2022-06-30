@@ -245,6 +245,7 @@ bool Client::init_methods() {
   methods_.emplace("editmessagecaption", &Client::process_edit_message_caption_query);
   methods_.emplace("editmessagereplymarkup", &Client::process_edit_message_reply_markup_query);
   methods_.emplace("deletemessage", &Client::process_delete_message_query);
+  methods_.emplace("createinvoicelink", &Client::process_create_invoice_link_query);
   methods_.emplace("setgamescore", &Client::process_set_game_score_query);
   methods_.emplace("getgamehighscores", &Client::process_get_game_high_scores_query);
   methods_.emplace("answerwebappquery", &Client::process_answer_web_app_query_query);
@@ -336,16 +337,18 @@ bool Client::init_methods() {
 
 class Client::JsonFile final : public Jsonable {
  public:
-  JsonFile(const td_api::file *file, const Client *client) : file_(file), client_(client) {
+  JsonFile(const td_api::file *file, const Client *client, bool with_path)
+      : file_(file), client_(client), with_path_(with_path) {
   }
   void store(JsonValueScope *scope) const {
     auto object = scope->enter_object();
-    client_->json_store_file(object, file_, true);
+    client_->json_store_file(object, file_, with_path_);
   }
 
  private:
   const td_api::file *file_;
   const Client *client_;
+  bool with_path_;
 };
 
 class Client::JsonDatedFile final : public Jsonable {
@@ -402,6 +405,12 @@ class Client::JsonUser final : public Jsonable {
     }
     if (user_info != nullptr && !user_info->language_code.empty()) {
       object("language_code", user_info->language_code);
+    }
+    if (user_info != nullptr && user_info->is_premium) {
+      object("is_premium", td::JsonTrue());
+    }
+    if (user_info != nullptr && user_info->added_to_attachment_menu) {
+      object("added_to_attachment_menu", td::JsonTrue());
     }
 
     // start custom properties impl
@@ -803,6 +812,12 @@ class Client::JsonChat final : public Jsonable {
           if (supergroup_info->is_supergroup) {
             object("permissions", JsonChatPermissions(chat_info->permissions.get()));
           }
+          if (supergroup_info->is_supergroup && supergroup_info->join_to_send_messages) {
+            object("join_to_send_messages", td::JsonTrue());
+          }
+          if (supergroup_info->is_supergroup && supergroup_info->join_by_request) {
+            object("join_by_request", td::JsonTrue());
+          }
           if (supergroup_info->slow_mode_delay != 0) {
             object("slow_mode_delay", supergroup_info->slow_mode_delay);
           }
@@ -1111,6 +1126,9 @@ class Client::JsonSticker final : public Jsonable {
         object("mask_position", JsonMaskPosition(mask_position.get()));
       }
     }
+    if (sticker_->premium_animation_ != nullptr) {
+      object("premium_animation", JsonFile(sticker_->premium_animation_.get(), client_, false));
+    }
     client_->json_store_thumbnail(object, sticker_->thumbnail_.get());
     client_->json_store_file(object, sticker_->sticker_.get());
   }
@@ -1298,7 +1316,7 @@ class Client::JsonInvoice final : public Jsonable {
   void store(JsonValueScope *scope) const {
     auto object = scope->enter_object();
     object("title", invoice_->title_);
-    object("description", invoice_->description_);
+    object("description", invoice_->description_->text_);
     object("start_parameter", invoice_->start_parameter_);
     object("currency", invoice_->currency_);
     object("total_amount", invoice_->total_amount_);
@@ -1982,10 +2000,7 @@ void Client::JsonMessage::store(JsonValueScope *scope) const {
     }
     case td_api::messageChatChangePhoto::ID: {
       auto content = static_cast<const td_api::messageChatChangePhoto *>(message_->content.get());
-      if (content->photo_ == nullptr) {
-        LOG(ERROR) << "Got empty messageChatChangePhoto";
-        break;
-      }
+      CHECK(content->photo_ != nullptr);
       object("new_chat_photo", JsonChatPhoto(content->photo_.get(), client_));
       break;
     }
@@ -3906,6 +3921,25 @@ class Client::TdOnGetSupergroupMembersCountCallback final : public TdQueryCallba
   PromisedQueryPtr query_;
 };
 
+class Client::TdOnCreateInvoiceLinkCallback final : public TdQueryCallback {
+ public:
+  explicit TdOnCreateInvoiceLinkCallback(PromisedQueryPtr query) : query_(std::move(query)) {
+  }
+
+  void on_result(object_ptr<td_api::Object> result) final {
+    if (result->get_id() == td_api::error::ID) {
+      return fail_query_with_error(std::move(query_), move_object_as<td_api::error>(result));
+    }
+
+    CHECK(result->get_id() == td_api::httpUrl::ID);
+    auto http_url = move_object_as<td_api::httpUrl>(result);
+    return answer_query(td::VirtuallyJsonableString(http_url->url_), std::move(query_));
+  }
+
+ private:
+  PromisedQueryPtr query_;
+};
+
 class Client::TdOnReplacePrimaryChatInviteLinkCallback final : public TdQueryCallback {
  public:
   explicit TdOnReplacePrimaryChatInviteLinkCallback(PromisedQueryPtr query) : query_(std::move(query)) {
@@ -4006,7 +4040,7 @@ class Client::TdOnReturnFileCallback final : public TdQueryCallback {
 
     CHECK(result->get_id() == td_api::file::ID);
     auto file = move_object_as<td_api::file>(result);
-    answer_query(JsonFile(file.get(), client_), std::move(query_));
+    answer_query(JsonFile(file.get(), client_, false), std::move(query_));
   }
 
  private:
@@ -5270,7 +5304,9 @@ void Client::on_update(object_ptr<td_api::Object> result) {
       auto user_id = update->user_id_;
       auto full_info = update->user_full_info_.get();
       set_user_photo(user_id, std::move(full_info->photo_));
-      set_user_bio(user_id, std::move(full_info->bio_));
+      if (full_info->bio_ != nullptr) {
+        set_user_bio(user_id, std::move(full_info->bio_->text_));
+      }
       set_user_has_private_forwards(user_id, full_info->has_private_forwards_);
       break;
     }
@@ -6152,8 +6188,9 @@ td::Result<td_api::object_ptr<td_api::InputMessageContent>> Client::get_input_me
 
     return make_object<td_api::inputMessageInvoice>(
         make_object<td_api::invoice>(currency, std::move(prices), max_tip_amount, std::move(suggested_tip_amounts),
-                                     false, need_name, need_phone_number, need_email_address, need_shipping_address,
-                                     send_phone_number_to_provider, send_email_address_to_provider, is_flexible),
+                                     td::string(), false, need_name, need_phone_number, need_email_address,
+                                     need_shipping_address, send_phone_number_to_provider,
+                                     send_email_address_to_provider, is_flexible),
         title, description, photo_url, photo_size, photo_width, photo_height, payload, provider_token, provider_data,
         td::string());
   }
@@ -7284,6 +7321,71 @@ td::Result<td::vector<td_api::object_ptr<td_api::InputMessageContent>>> Client::
   return std::move(contents);
 }
 
+td::Result<td_api::object_ptr<td_api::inputMessageInvoice>> Client::get_input_message_invoice(const Query *query) {
+  TRY_RESULT(title, get_required_string_arg(query, "title"));
+  TRY_RESULT(description, get_required_string_arg(query, "description"));
+  TRY_RESULT(payload, get_required_string_arg(query, "payload"));
+  if (!td::check_utf8(payload.str())) {
+    return Status::Error(400, "The payload must be encoded in UTF-8");
+  }
+  TRY_RESULT(provider_token, get_required_string_arg(query, "provider_token"));
+  auto provider_data = query->arg("provider_data");
+  auto start_parameter = query->arg("start_parameter");
+  TRY_RESULT(currency, get_required_string_arg(query, "currency"));
+
+  TRY_RESULT(labeled_price_parts, get_required_string_arg(query, "prices"));
+  auto r_labeled_price_parts_value = json_decode(labeled_price_parts);
+  if (r_labeled_price_parts_value.is_error()) {
+    return Status::Error(400, "Can't parse prices JSON object");
+  }
+
+  TRY_RESULT(prices, get_labeled_price_parts(r_labeled_price_parts_value.ok_ref()));
+
+  int64 max_tip_amount = 0;
+  td::vector<int64> suggested_tip_amounts;
+  {
+    auto max_tip_amount_str = query->arg("max_tip_amount");
+    if (!max_tip_amount_str.empty()) {
+      auto r_max_tip_amount = td::to_integer_safe<int64>(max_tip_amount_str);
+      if (r_max_tip_amount.is_error()) {
+        return Status::Error(400, "Can't parse \"max_tip_amount\" as Number");
+      }
+      max_tip_amount = r_max_tip_amount.ok();
+    }
+
+    auto suggested_tip_amounts_str = query->arg("suggested_tip_amounts");
+    if (!suggested_tip_amounts_str.empty()) {
+      auto r_suggested_tip_amounts_value = json_decode(suggested_tip_amounts_str);
+      if (r_suggested_tip_amounts_value.is_error()) {
+        return Status::Error(400, "Can't parse suggested_tip_amounts JSON object");
+      }
+
+      TRY_RESULT_ASSIGN(suggested_tip_amounts, get_suggested_tip_amounts(r_suggested_tip_amounts_value.ok_ref()));
+    }
+  }
+
+  auto photo_url = query->arg("photo_url");
+  int32 photo_size = get_integer_arg(query, "photo_size", 0, 0, 1000000000);
+  int32 photo_width = get_integer_arg(query, "photo_width", 0, 0, MAX_LENGTH);
+  int32 photo_height = get_integer_arg(query, "photo_height", 0, 0, MAX_LENGTH);
+
+  auto need_name = to_bool(query->arg("need_name"));
+  auto need_phone_number = to_bool(query->arg("need_phone_number"));
+  auto need_email_address = to_bool(query->arg("need_email"));
+  auto need_shipping_address = to_bool(query->arg("need_shipping_address"));
+  auto send_phone_number_to_provider = to_bool(query->arg("send_phone_number_to_provider"));
+  auto send_email_address_to_provider = to_bool(query->arg("send_email_to_provider"));
+  auto is_flexible = to_bool(query->arg("is_flexible"));
+
+  return make_object<td_api::inputMessageInvoice>(
+      make_object<td_api::invoice>(currency.str(), std::move(prices), max_tip_amount, std::move(suggested_tip_amounts),
+                                   td::string(), false, need_name, need_phone_number, need_email_address,
+                                   need_shipping_address, send_phone_number_to_provider, send_email_address_to_provider,
+                                   is_flexible),
+      title.str(), description.str(), photo_url.str(), photo_size, photo_width, photo_height, payload.str(),
+      provider_token.str(), provider_data.str(), start_parameter.str());
+}
+
 td::Result<td::vector<td::string>> Client::get_poll_options(const Query *query) {
   auto input_options = query->arg("options");
   LOG(INFO) << "Parsing JSON object: " << input_options;
@@ -7555,8 +7657,15 @@ void Client::on_message_send_failed(int64 chat_id, int64 old_message_id, int64 n
   auto query_id = extract_yet_unsent_message_query_id(chat_id, old_message_id, nullptr);
   auto &query = *pending_send_message_queries_[query_id];
   if (query.is_multisend) {
-    if (query.error == nullptr) {
-      query.error = std::move(error);
+    if (query.error == nullptr || query.error->message_ == "Group send failed") {
+      if (error->code_ == 429 || error->message_ == "Group send failed") {
+        query.error = std::move(error);
+      } else {
+        auto pos = (query.total_message_count - query.awaited_message_count + 1);
+        query.error = make_object<td_api::error>(error->code_, PSTRING() << "Failed to send message #" << pos
+                                                                         << " with the error message \""
+                                                                         << error->message_ << '"');
+      }
     }
     query.awaited_message_count--;
 
@@ -7870,69 +7979,8 @@ td::Status Client::process_send_game_query(PromisedQueryPtr &query) {
 
 td::Status Client::process_send_invoice_query(PromisedQueryPtr &query) {
   CHECK_IS_BOT();
-  TRY_RESULT(title, get_required_string_arg(query.get(), "title"));
-  TRY_RESULT(description, get_required_string_arg(query.get(), "description"));
-  TRY_RESULT(payload, get_required_string_arg(query.get(), "payload"));
-  if (!td::check_utf8(payload.str())) {
-    return Status::Error(400, "The payload must be encoded in UTF-8");
-  }
-  TRY_RESULT(provider_token, get_required_string_arg(query.get(), "provider_token"));
-  auto provider_data = query->arg("provider_data");
-  auto start_parameter = query->arg("start_parameter");
-  TRY_RESULT(currency, get_required_string_arg(query.get(), "currency"));
-
-  TRY_RESULT(labeled_price_parts, get_required_string_arg(query.get(), "prices"));
-  auto r_labeled_price_parts_value = json_decode(labeled_price_parts);
-  if (r_labeled_price_parts_value.is_error()) {
-    return Status::Error(400, "Can't parse prices JSON object");
-  }
-
-  TRY_RESULT(prices, get_labeled_price_parts(r_labeled_price_parts_value.ok_ref()));
-
-  int64 max_tip_amount = 0;
-  td::vector<int64> suggested_tip_amounts;
-  {
-    auto max_tip_amount_str = query->arg("max_tip_amount");
-    if (!max_tip_amount_str.empty()) {
-      auto r_max_tip_amount = td::to_integer_safe<int64>(max_tip_amount_str);
-      if (r_max_tip_amount.is_error()) {
-        return Status::Error(400, "Can't parse \"max_tip_amount\" as Number");
-      }
-      max_tip_amount = r_max_tip_amount.ok();
-    }
-
-    auto suggested_tip_amounts_str = query->arg("suggested_tip_amounts");
-    if (!suggested_tip_amounts_str.empty()) {
-      auto r_suggested_tip_amounts_value = json_decode(suggested_tip_amounts_str);
-      if (r_suggested_tip_amounts_value.is_error()) {
-        return Status::Error(400, "Can't parse suggested_tip_amounts JSON object");
-      }
-
-      TRY_RESULT_ASSIGN(suggested_tip_amounts, get_suggested_tip_amounts(r_suggested_tip_amounts_value.ok_ref()));
-    }
-  }
-
-  auto photo_url = query->arg("photo_url");
-  int32 photo_size = get_integer_arg(query.get(), "photo_size", 0, 0, 1000000000);
-  int32 photo_width = get_integer_arg(query.get(), "photo_width", 0, 0, MAX_LENGTH);
-  int32 photo_height = get_integer_arg(query.get(), "photo_height", 0, 0, MAX_LENGTH);
-
-  auto need_name = to_bool(query->arg("need_name"));
-  auto need_phone_number = to_bool(query->arg("need_phone_number"));
-  auto need_email_address = to_bool(query->arg("need_email"));
-  auto need_shipping_address = to_bool(query->arg("need_shipping_address"));
-  auto send_phone_number_to_provider = to_bool(query->arg("send_phone_number_to_provider"));
-  auto send_email_address_to_provider = to_bool(query->arg("send_email_to_provider"));
-  auto is_flexible = to_bool(query->arg("is_flexible"));
-
-  do_send_message(make_object<td_api::inputMessageInvoice>(
-                      make_object<td_api::invoice>(
-                          currency.str(), std::move(prices), max_tip_amount, std::move(suggested_tip_amounts), false,
-                          need_name, need_phone_number, need_email_address, need_shipping_address,
-                          send_phone_number_to_provider, send_email_address_to_provider, is_flexible),
-                      title.str(), description.str(), photo_url.str(), photo_size, photo_width, photo_height,
-                      payload.str(), provider_token.str(), provider_data.str(), start_parameter.str()),
-                  std::move(query));
+  TRY_RESULT(input_message_invoice, get_input_message_invoice(query.get()));
+  do_send_message(std::move(input_message_invoice), std::move(query));
   return Status::OK();
 }
 
@@ -8321,6 +8369,13 @@ td::Status Client::process_delete_message_query(PromisedQueryPtr &query) {
                   send_request(make_object<td_api::deleteMessages>(chat_id, td::vector<int64>{message_id}, true),
                                td::make_unique<TdOnOkQueryCallback>(std::move(query)));
                 });
+  return Status::OK();
+}
+
+td::Status Client::process_create_invoice_link_query(PromisedQueryPtr &query) {
+  TRY_RESULT(input_message_invoice, get_input_message_invoice(query.get()));
+  send_request(make_object<td_api::createInvoiceLink>(std::move(input_message_invoice)),
+               td::make_unique<TdOnCreateInvoiceLinkCallback>(std::move(query)));
   return Status::OK();
 }
 
@@ -9212,16 +9267,20 @@ td::Status Client::process_set_webhook_query(PromisedQueryPtr &query) {
   // do not send warning just after webhook was deleted or set
   next_bot_updates_warning_time_ = td::max(next_bot_updates_warning_time_, now + BOT_UPDATES_WARNING_DELAY);
 
+  bool new_has_certificate = new_url.empty() ? false
+                                             : (get_webhook_certificate(query.get()) != nullptr ||
+                                                (query->is_internal() && query->arg("certificate") == "previous"));
   int32 new_max_connections = new_url.empty() ? 0 : get_webhook_max_connections(query.get());
   Slice new_ip_address = new_url.empty() ? Slice() : query->arg("ip_address");
   bool new_fix_ip_address = new_url.empty() ? false : get_webhook_fix_ip_address(query.get());
+  Slice new_secret_token = new_url.empty() ? Slice() : query->arg("secret_token");
   bool drop_pending_updates = to_bool(query->arg("drop_pending_updates"));
   if (webhook_set_query_) {
     // already updating webhook. Cancel previous request
     fail_query_conflict("Conflict: terminated by other setWebhook", std::move(webhook_set_query_));
-  } else if (webhook_url_ == new_url && !has_webhook_certificate_ && query->file("certificate") == nullptr &&
-             query->arg("certificate").empty() && new_max_connections == webhook_max_connections_ &&
-             new_fix_ip_address == webhook_fix_ip_address_ &&
+  } else if (webhook_url_ == new_url && !has_webhook_certificate_ && !new_has_certificate &&
+             new_max_connections == webhook_max_connections_ && new_fix_ip_address == webhook_fix_ip_address_ &&
+             new_secret_token == webhook_secret_token_ &&
              (!new_fix_ip_address || new_ip_address == webhook_ip_address_) && !drop_pending_updates) {
     if (update_allowed_update_types(query.get())) {
       save_webhook();
@@ -9790,7 +9849,7 @@ void Client::on_file_download(int32 file_id, td::Result<object_ptr<td_api::file>
       const auto &error = r_file.error();
       fail_query_with_error(std::move(query), error.code(), error.public_message());
     } else {
-      answer_query(JsonFile(r_file.ok().get(), this), std::move(query));
+      answer_query(JsonFile(r_file.ok().get(), this, true), std::move(query));
     }
   }
 }
@@ -9821,6 +9880,9 @@ void Client::save_webhook() const {
   }
   if (webhook_fix_ip_address_) {
     value += "#fix_ip/";
+  }
+  if (!webhook_secret_token_.empty()) {
+    value += PSTRING() << "#secret" << webhook_secret_token_ << '/';
   }
   if (allowed_update_types_ != DEFAULT_ALLOWED_UPDATE_TYPES) {
     value += PSTRING() << "#allow" << allowed_update_types_ << '/';
@@ -9865,6 +9927,7 @@ void Client::webhook_closed(Status status) {
   webhook_max_connections_ = 0;
   webhook_ip_address_ = td::string();
   webhook_fix_ip_address_ = false;
+  webhook_secret_token_ = td::string();
   webhook_set_time_ = td::Time::now();
   last_webhook_error_date_ = 0;
   last_webhook_error_ = Status::OK();
@@ -9885,6 +9948,18 @@ void Client::hangup_shared() {
 
 td::string Client::get_webhook_certificate_path() const {
   return dir_ + "cert.pem";
+}
+
+const td::HttpFile *Client::get_webhook_certificate(const Query *query) const {
+  auto file = query->file("certificate");
+  if (file == nullptr) {
+    auto attach_name = query->arg("certificate");
+    Slice attach_protocol{"attach://"};
+    if (td::begins_with(attach_name, attach_protocol)) {
+      file = query->file(attach_name.substr(attach_protocol.size()));
+    }
+  }
+  return file;
 }
 
 td::int32 Client::get_webhook_max_connections(const Query *query) const {
@@ -9914,8 +9989,16 @@ void Client::do_set_webhook(PromisedQueryPtr query, bool was_deleted) {
     if (url.is_error()) {
       return fail_query(400, "Bad Request: invalid webhook URL specified", std::move(query));
     }
-    auto *cert_file_ptr = query->file("certificate");
+    auto secret_token = query->arg("secret_token");
+    if (secret_token.size() > 256) {
+      return fail_query(400, "Bad Request: secret token is too long", std::move(query));
+    }
+    if (!td::is_base64url_characters(secret_token)) {
+      return fail_query(400, "Bad Request: secret token contains unallowed characters", std::move(query));
+    }
+
     has_webhook_certificate_ = false;
+    auto *cert_file_ptr = get_webhook_certificate(query.get());
     if (cert_file_ptr != nullptr) {
       auto size = cert_file_ptr->size;
       if (size > MAX_CERTIFICATE_FILE_SIZE) {
@@ -9929,14 +10012,14 @@ void Client::do_set_webhook(PromisedQueryPtr query, bool was_deleted) {
         return fail_query(500, "Internal Server Error: failed to save certificate", std::move(query));
       }
       has_webhook_certificate_ = true;
-    }
-
-    if (query->is_internal() && query->arg("certificate") == "previous") {
+    } else if (query->is_internal() && query->arg("certificate") == "previous") {
       has_webhook_certificate_ = true;
     }
+
     webhook_url_ = new_url.str();
     webhook_set_time_ = td::Time::now();
     webhook_max_connections_ = get_webhook_max_connections(query.get());
+    webhook_secret_token_ = secret_token.str();
     webhook_ip_address_ = query->arg("ip_address").str();
     webhook_fix_ip_address_ = get_webhook_fix_ip_address(query.get());
     last_webhook_error_date_ = 0;
@@ -9949,7 +10032,7 @@ void Client::do_set_webhook(PromisedQueryPtr query, bool was_deleted) {
     webhook_id_ = td::create_actor<WebhookActor>(
         webhook_actor_name, actor_shared(this, webhook_generation_), tqueue_id_, url.move_as_ok(),
         has_webhook_certificate_ ? get_webhook_certificate_path() : "", webhook_max_connections_, query->is_internal(),
-        webhook_ip_address_, webhook_fix_ip_address_, parameters_);
+        webhook_ip_address_, webhook_fix_ip_address_, webhook_secret_token_, parameters_);
     // wait for webhook verified or webhook callback
     webhook_query_type_ = WebhookQueryType::Verify;
     webhook_set_query_ = std::move(query);
@@ -10031,7 +10114,10 @@ void Client::on_sent_message(object_ptr<td_api::message> &&message, int64 query_
   auto emplace_result = yet_unsent_messages_.emplace(yet_unsent_message_id, yet_unsent_message);
   CHECK(emplace_result.second);
   yet_unsent_message_count_[chat_id]++;
-  pending_send_message_queries_[query_id]->awaited_message_count++;
+
+  auto &query = *pending_send_message_queries_[query_id];
+  query.awaited_message_count++;
+  query.total_message_count++;
 }
 
 void Client::abort_long_poll(bool from_set_webhook) {
@@ -10210,6 +10296,8 @@ void Client::add_user(UserInfo *user_info, object_ptr<td_api::user> &&user) {
   //end custom properties
 
   user_info->have_access = user->have_access_;
+  user_info->is_premium = user->is_premium_;
+  user_info->added_to_attachment_menu = user->added_to_attachment_menu_;
 
   switch (user->type_->get_id()) {
     case td_api::userTypeRegular::ID:
@@ -10312,6 +10400,8 @@ void Client::add_supergroup(SupergroupInfo *supergroup_info, object_ptr<td_api::
   supergroup_info->status = std::move(supergroup->status_);
   supergroup_info->is_supergroup = !supergroup->is_channel_;
   supergroup_info->has_location = supergroup->has_location_;
+  supergroup_info->join_to_send_messages = supergroup->join_to_send_messages_;
+  supergroup_info->join_by_request = supergroup->join_by_request_;
 
   // start custom properties
   supergroup_info->is_verified = supergroup->is_verified_;
@@ -10968,26 +11058,10 @@ bool Client::need_skip_update_message(int64 chat_id, const object_ptr<td_api::me
   }
 
   switch (message->content_->get_id()) {
-    case td_api::messagePhoto::ID: {
-      auto content = static_cast<const td_api::messagePhoto *>(message->content_.get());
-      if (content->photo_ == nullptr) {
-        LOG(ERROR) << "Got empty messagePhoto";
-        return true;
-      }
-      break;
-    }
     case td_api::messageChatAddMembers::ID: {
       auto content = static_cast<const td_api::messageChatAddMembers *>(message->content_.get());
       if (content->member_user_ids_.empty()) {
         LOG(ERROR) << "Got empty messageChatAddMembers";
-        return true;
-      }
-      break;
-    }
-    case td_api::messageChatChangePhoto::ID: {
-      auto content = static_cast<const td_api::messageChatChangePhoto *>(message->content_.get());
-      if (content->photo_ == nullptr) {
-        LOG(ERROR) << "Got empty messageChatChangePhoto";
         return true;
       }
       break;
@@ -11007,7 +11081,7 @@ bool Client::need_skip_update_message(int64 chat_id, const object_ptr<td_api::me
       }
       const MessageInfo *pinned_message = get_message(chat_id, pinned_message_id);
       if (pinned_message == nullptr) {
-        LOG(WARNING) << "Pinned unknown, inaccessible or deleted message " << pinned_message_id;
+        LOG(WARNING) << "Pinned unknown, inaccessible or deleted message " << pinned_message_id << " in " << chat_id;
         return true;
       }
       break;

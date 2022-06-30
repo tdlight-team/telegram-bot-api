@@ -13,6 +13,8 @@
 #include "td/telegram/ClientActor.h"
 #include "td/telegram/td_api.h"
 
+#include "td/net/HttpFile.h"
+
 #include "td/actor/actor.h"
 #include "td/actor/PromiseFuture.h"
 #include "td/actor/SignalSlot.h"
@@ -203,6 +205,7 @@ class Client final : public WebhookActor::Callback {
   class TdOnGetGroupMembersCallback;
   class TdOnGetSupergroupMembersCallback;
   class TdOnGetSupergroupMembersCountCallback;
+  class TdOnCreateInvoiceLinkCallback;
   class TdOnReplacePrimaryChatInviteLinkCallback;
   class TdOnGetChatInviteLinkCallback;
   class TdOnGetGameHighScoresCallback;
@@ -475,6 +478,8 @@ class Client final : public WebhookActor::Callback {
   td::Result<td::vector<object_ptr<td_api::InputMessageContent>>> get_input_message_contents(
       const Query *query, td::JsonValue &&value) const;
 
+  static td::Result<object_ptr<td_api::inputMessageInvoice>> get_input_message_invoice(const Query *query);
+
   static object_ptr<td_api::messageSendOptions> get_message_send_options(bool disable_notification,
                                                                          bool protect_content,
                                                                          object_ptr<td_api::MessageSchedulingState> &&scheduling_state);
@@ -556,6 +561,7 @@ class Client final : public WebhookActor::Callback {
   Status process_edit_message_caption_query(PromisedQueryPtr &query);
   Status process_edit_message_reply_markup_query(PromisedQueryPtr &query);
   Status process_delete_message_query(PromisedQueryPtr &query);
+  Status process_create_invoice_link_query(PromisedQueryPtr &query);
   Status process_set_game_score_query(PromisedQueryPtr &query);
   Status process_get_game_high_scores_query(PromisedQueryPtr &query);
   Status process_answer_web_app_query_query(PromisedQueryPtr &query);
@@ -650,6 +656,7 @@ class Client final : public WebhookActor::Callback {
   void webhook_error(Status status) final;
   void webhook_closed(Status status) final;
   void hangup_shared() final;
+  const td::HttpFile *get_webhook_certificate(const Query *query) const;
   int32 get_webhook_max_connections(const Query *query) const;
   static bool get_webhook_fix_ip_address(const Query *query);
   void do_set_webhook(PromisedQueryPtr query, bool was_deleted);
@@ -719,6 +726,8 @@ class Client final : public WebhookActor::Callback {
     bool can_read_all_group_messages = false;
     bool is_inline_bot = false;
     bool has_private_forwards = false;
+    bool is_premium = false;
+    bool added_to_attachment_menu = false;
   };
   static void add_user(UserInfo *user_info, object_ptr<td_api::user> &&user);
   void set_user_photo(int64 user_id, object_ptr<td_api::chatPhoto> &&photo);
@@ -759,6 +768,8 @@ class Client final : public WebhookActor::Callback {
     bool is_supergroup = false;
     bool can_set_sticker_set = false;
     bool has_location = false;
+    bool join_to_send_messages = false;
+    bool join_by_request = false;
 
     // start custom properties
     bool is_verified = false;
@@ -1054,6 +1065,7 @@ class Client final : public WebhookActor::Callback {
   struct PendingSendMessageQuery {
     PromisedQueryPtr query;
     bool is_multisend = false;
+    int32 total_message_count = 0;
     int32 awaited_message_count = 0;
     td::vector<td::string> messages;
     object_ptr<td_api::error> error;
@@ -1131,6 +1143,7 @@ class Client final : public WebhookActor::Callback {
   int32 webhook_max_connections_ = 0;
   td::string webhook_ip_address_;
   bool webhook_fix_ip_address_ = false;
+  td::string webhook_secret_token_;
   int32 last_webhook_error_date_ = 0;
   Status last_webhook_error_;
   double next_allowed_set_webhook_time_ = 0;
