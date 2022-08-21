@@ -15,7 +15,6 @@
 #include "td/net/TransparentProxy.h"
 
 #include "td/actor/actor.h"
-#include "td/actor/PromiseFuture.h"
 
 #include "td/utils/base64.h"
 #include "td/utils/buffer.h"
@@ -26,6 +25,7 @@
 #include "td/utils/misc.h"
 #include "td/utils/port/IPAddress.h"
 #include "td/utils/port/SocketFd.h"
+#include "td/utils/Promise.h"
 #include "td/utils/Random.h"
 #include "td/utils/ScopeGuard.h"
 #include "td/utils/SliceBuilder.h"
@@ -82,7 +82,7 @@ void WebhookActor::relax_wakeup_at(double wakeup_at, const char *source) {
 }
 
 void WebhookActor::resolve_ip_address() {
-  if (fix_ip_address_) {
+  if (fix_ip_address_ || is_ip_address_being_resolved_) {
     return;
   }
   if (td::Time::now() < next_ip_address_resolve_time_) {
@@ -90,43 +90,42 @@ void WebhookActor::resolve_ip_address() {
     return;
   }
 
-  bool future_created = false;
-  if (future_ip_address_.empty()) {
-    td::PromiseActor<td::IPAddress> promise;
-    init_promise_future(&promise, &future_ip_address_);
-    future_created = true;
-    send_closure(parameters_->get_host_by_name_actor_id_, &td::GetHostByNameActor::run, url_.host_, url_.port_, false,
-                 td::PromiseCreator::from_promise_actor(std::move(promise)));
+  is_ip_address_being_resolved_ = true;
+  auto promise = td::PromiseCreator::lambda([actor_id = actor_id(this)](td::Result<td::IPAddress> r_ip_address) {
+    send_closure(actor_id, &WebhookActor::on_resolved_ip_address, std::move(r_ip_address));
+  });
+  send_closure(parameters_->get_host_by_name_actor_id_, &td::GetHostByNameActor::run, url_.host_, url_.port_, false,
+               std::move(promise));
+}
+
+void WebhookActor::on_resolved_ip_address(td::Result<td::IPAddress> r_ip_address) {
+  CHECK(is_ip_address_being_resolved_);
+  is_ip_address_being_resolved_ = false;
+
+  next_ip_address_resolve_time_ =
+      td::Time::now() + IP_ADDRESS_CACHE_TIME + td::Random::fast(0, IP_ADDRESS_CACHE_TIME / 10);
+  relax_wakeup_at(next_ip_address_resolve_time_, "on_resolved_ip_address");
+
+  SCOPE_EXIT {
+    loop();
+  };
+
+  if (r_ip_address.is_error()) {
+    return on_error(r_ip_address.move_as_error());
   }
-
-  if (future_ip_address_.is_ready()) {
-    next_ip_address_resolve_time_ =
-        td::Time::now() + IP_ADDRESS_CACHE_TIME + td::Random::fast(0, IP_ADDRESS_CACHE_TIME / 10);
-    relax_wakeup_at(next_ip_address_resolve_time_, "resolve_ip_address");
-
-    auto r_ip_address = future_ip_address_.move_as_result();
-    if (r_ip_address.is_error()) {
-      CHECK(!(r_ip_address.error() == td::Status::Error<td::FutureActor<td::IPAddress>::HANGUP_ERROR_CODE>()));
-      return on_error(r_ip_address.move_as_error());
-    }
-    auto new_ip_address = r_ip_address.move_as_ok();
-    if (!check_ip_address(new_ip_address)) {
-      return on_error(td::Status::Error(PSLICE() << "IP address " << new_ip_address.get_ip_str() << " is reserved"));
-    }
-    if (!(ip_address_ == new_ip_address)) {
-      VLOG(webhook) << "IP address has changed: " << ip_address_ << " --> " << new_ip_address;
-      ip_address_ = new_ip_address;
-      ip_generation_++;
-      if (was_checked_) {
-        on_webhook_verified();
-      }
-    }
-    VLOG(webhook) << "IP address was verified";
-  } else {
-    if (future_created) {
-      future_ip_address_.set_event(td::EventCreator::yield(actor_id()));
+  auto new_ip_address = r_ip_address.move_as_ok();
+  if (!check_ip_address(new_ip_address)) {
+    return on_error(td::Status::Error(PSLICE() << "IP address " << new_ip_address.get_ip_str() << " is reserved"));
+  }
+  if (!(ip_address_ == new_ip_address)) {
+    VLOG(webhook) << "IP address has changed: " << ip_address_ << " --> " << new_ip_address;
+    ip_address_ = new_ip_address;
+    ip_generation_++;
+    if (was_checked_) {
+      on_webhook_verified();
     }
   }
+  VLOG(webhook) << "IP address was verified";
 }
 
 td::Status WebhookActor::create_connection() {
@@ -602,11 +601,10 @@ void WebhookActor::handle(td::unique_ptr<td::HttpQuery> response) {
             method != "logout" && !td::begins_with(method, "get")) {
           VLOG(webhook) << "Receive request " << method << " in response to webhook";
           auto query = td::make_unique<Query>(std::move(response->container_), td::MutableSlice(), false, false,
-                                               td::MutableSlice(), std::move(response->args_),
-                                               std::move(response->headers_), std::move(response->files_),
-                                               parameters_->shared_data_, response->peer_address_, false);
-          auto promised_query =
-              PromisedQueryPtr(query.release(), PromiseDeleter(td::PromiseActor<td::unique_ptr<Query>>()));
+                                              td::MutableSlice(), std::move(response->args_),
+                                              std::move(response->headers_), std::move(response->files_),
+                                              parameters_->shared_data_, response->peer_address_, false);
+          auto promised_query = PromisedQueryPtr(query.release(), PromiseDeleter(td::Promise<td::unique_ptr<Query>>()));
           send_closure(callback_, &Callback::send, std::move(promised_query));
         }
         first_error_410_time_ = 0;

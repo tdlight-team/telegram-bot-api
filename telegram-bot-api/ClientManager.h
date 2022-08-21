@@ -11,13 +11,13 @@
 #include "telegram-bot-api/Stats.h"
 
 #include "td/actor/actor.h"
-#include "td/actor/PromiseFuture.h"
 
 #include "td/utils/buffer.h"
 #include "td/utils/common.h"
 #include "td/utils/Container.h"
 #include "td/utils/FlatHashMap.h"
 #include "td/utils/FloodControlFast.h"
+#include "td/utils/Promise.h"
 #include "td/utils/Slice.h"
 
 #include <memory>
@@ -46,7 +46,7 @@ class ClientManager final : public td::Actor {
 
   bool check_flood_limits(PromisedQueryPtr &query, bool is_user_login=false);
 
-  void get_stats(td::PromiseActor<td::BufferSlice> promise, td::vector<std::pair<td::string, td::string>> args, bool as_json);
+  void get_stats(td::Promise<td::BufferSlice> promise, td::vector<std::pair<td::string, td::string>> args, bool as_json);
 
   void close(td::Promise<td::Unit> &&promise);
 

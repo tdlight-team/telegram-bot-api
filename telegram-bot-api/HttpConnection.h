@@ -13,10 +13,10 @@
 #include "td/net/HttpQuery.h"
 
 #include "td/actor/actor.h"
-#include "td/actor/PromiseFuture.h"
 
 #include "td/utils/buffer.h"
 #include "td/utils/Slice.h"
+#include "td/utils/Status.h"
 
 #include <memory>
 
@@ -32,10 +32,7 @@ class HttpConnection final : public td::HttpInboundConnection::Callback {
 
   void handle(td::unique_ptr<td::HttpQuery> http_query, td::ActorOwn<td::HttpInboundConnection> connection) final;
 
-  void wakeup() final;
-
  private:
-  td::FutureActor<td::unique_ptr<Query>> result_;
   td::ActorId<ClientManager> client_manager_;
   td::ActorOwn<td::HttpInboundConnection> connection_;
   std::shared_ptr<SharedData> shared_data_;
@@ -44,6 +41,8 @@ class HttpConnection final : public td::HttpInboundConnection::Callback {
     connection_.release();
     stop();
   }
+
+  void on_query_finished(td::Result<td::unique_ptr<Query>> r_query);
 
   void send_response(int http_status_code, td::BufferSlice &&content, int retry_after);
 

@@ -181,7 +181,7 @@
 
 <div class="main">
   <div id="osSelectDiv" class="large">
-    <p>Choose an operating system, on which you want to use the Telegram Bot API server:</p>
+    <p>Choose an operating system on which you want to use the Telegram Bot API server:</p>
     <select id="osSelect" onchange="onOsChanged(false)" autofocus class="large">
       <option>Choose an operating system:</option>
       <option>Windows</option>
@@ -195,7 +195,7 @@
   </div>
 
   <div id="linuxSelectDiv" class="hide">
-    <p>Choose a Linux distro, on which you want to use the Telegram Bot API server:</p>
+    <p>Choose a Linux distro on which you want to use the Telegram Bot API server:</p>
     <select id="linuxSelect" onchange="onOsChanged(false)" class="large">
       <option>Choose a Linux distro:</option>
       <option>Alpine</option>
@@ -207,6 +207,7 @@
       <option>Ubuntu 16</option>
       <option>Ubuntu 18</option>
       <option>Ubuntu 20</option>
+      <option>Ubuntu 22</option>
       <option>Other</option>
     </select>
     <p></p>
@@ -493,6 +494,8 @@ function onOptionsChanged() {
         return '-6.0';
       case 'Ubuntu 20':
         return '-10';
+      case 'Ubuntu 22':
+        return '-14';
       default:
         return ''; // use default version
     }
@@ -534,6 +537,7 @@ function onOptionsChanged() {
       case 'Ubuntu 16':
       case 'Ubuntu 18':
       case 'Ubuntu 20':
+      case 'Ubuntu 22':
         if (linux_distro.includes('Debian') && !use_root) {
           commands.push('su -');
         }
@@ -550,7 +554,7 @@ function onOptionsChanged() {
         }
         if (use_clang) {
           packages += ' clang' + getClangVersionSuffix() + ' libc++-dev';
-          if (linux_distro === 'Debian 10+' || linux_distro === 'Ubuntu 18' || linux_distro === 'Ubuntu 20') {
+          if (linux_distro === 'Debian 10+' || linux_distro === 'Ubuntu 18' || linux_distro === 'Ubuntu 20' || linux_distro === 'Ubuntu 22') {
             packages += ' libc++abi-dev';
           }
         } else {

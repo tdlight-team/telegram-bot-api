@@ -15,7 +15,6 @@
 #include "td/net/SslStream.h"
 
 #include "td/actor/actor.h"
-#include "td/actor/PromiseFuture.h"
 
 #include "td/utils/BufferedFd.h"
 #include "td/utils/common.h"
@@ -137,7 +136,7 @@ class WebhookActor final : public td::HttpOutboundConnection::Callback {
   td::IPAddress ip_address_;
   td::int32 ip_generation_ = 0;
   double next_ip_address_resolve_time_ = 0;
-  td::FutureActor<td::IPAddress> future_ip_address_;
+  bool is_ip_address_being_resolved_ = false;
 
   class Connection final : public td::ListNode {
    public:
@@ -175,6 +174,7 @@ class WebhookActor final : public td::HttpOutboundConnection::Callback {
   void relax_wakeup_at(double wakeup_at, const char *source);
 
   void resolve_ip_address();
+  void on_resolved_ip_address(td::Result<td::IPAddress> r_ip_address);
 
   td::Result<td::SslStream> create_ssl_stream();
   td::Status create_connection() TD_WARN_UNUSED_RESULT;
