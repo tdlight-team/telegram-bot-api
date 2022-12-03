@@ -6,7 +6,7 @@ if (POLICY CMP0065)
   cmake_policy(SET CMP0065 NEW)
 endif()
 
-project(TelegramBotApi VERSION 6.2 LANGUAGES CXX)
+project(TelegramBotApi VERSION 6.3.2 LANGUAGES CXX)
 
 if (POLICY CMP0069)
   option(TELEGRAM_BOT_API_ENABLE_LTO "Use \"ON\" to enable Link Time Optimization.")
@@ -85,6 +85,7 @@ set(TELEGRAM_BOT_API_SOURCE
   telegram-bot-api/HttpStatConnection.cpp
   telegram-bot-api/Query.cpp
   telegram-bot-api/Stats.cpp
+  telegram-bot-api/Watchdog.cpp
   telegram-bot-api/WebhookActor.cpp
 
   telegram-bot-api/Client.h
@@ -95,6 +96,7 @@ set(TELEGRAM_BOT_API_SOURCE
   telegram-bot-api/HttpStatConnection.h
   telegram-bot-api/Query.h
   telegram-bot-api/Stats.h
+  telegram-bot-api/Watchdog.h
   telegram-bot-api/WebhookActor.h
 )
 

@@ -9,13 +9,10 @@
 #include "telegram-bot-api/HttpConnection.h"
 #include "telegram-bot-api/HttpServer.h"
 #include "telegram-bot-api/HttpStatConnection.h"
-#include "telegram-bot-api/Query.h"
 #include "telegram-bot-api/Stats.h"
-
-#include "td/telegram/ClientActor.h"
+#include "telegram-bot-api/Watchdog.h"
 
 #include "td/db/binlog/Binlog.h"
-#include "td/db/TQueue.h"
 
 #include "td/net/GetHostByNameActor.h"
 #include "td/net/HttpInboundConnection.h"
@@ -23,13 +20,11 @@
 #include "td/actor/actor.h"
 #include "td/actor/ConcurrentScheduler.h"
 
-#include "td/utils/buffer.h"
+#include "td/utils/AsyncFileLog.h"
 #include "td/utils/CombinedLog.h"
 #include "td/utils/common.h"
 #include "td/utils/crypto.h"
 #include "td/utils/ExitGuard.h"
-#include "td/utils/FileLog.h"
-#include "td/utils/format.h"
 //#include "td/utils/GitInfo.h"
 #include "td/utils/logging.h"
 #include "td/utils/MemoryLog.h"
@@ -42,18 +37,14 @@
 #include "td/utils/port/rlimit.h"
 #include "td/utils/port/signals.h"
 #include "td/utils/port/stacktrace.h"
-#include "td/utils/port/Stat.h"
+#include "td/utils/port/thread.h"
 #include "td/utils/port/user.h"
 #include "td/utils/Promise.h"
 #include "td/utils/Slice.h"
 #include "td/utils/SliceBuilder.h"
 #include "td/utils/Status.h"
 #include "td/utils/Time.h"
-#include "td/utils/TsLog.h"
 
-#include "memprof/memprof.h"
-
-#include <algorithm>
 #include <atomic>
 #include <cstdlib>
 #include <memory>
@@ -78,18 +69,31 @@ static td::MemoryLog<1 << 20> memory_log;
 void print_log() {
   auto buf = memory_log.get_buffer();
   auto pos = memory_log.get_pos();
+  size_t tail_length = buf.size() - pos;
+  while (tail_length > 0 && buf[pos + tail_length - 1] == ' ') {
+    tail_length--;
+  }
+  if (tail_length + 100 >= buf.size() - pos) {
+    tail_length = buf.size() - pos;
+  }
   td::signal_safe_write("------- Log dump -------\n");
-  td::signal_safe_write(buf.substr(pos), false);
+  td::signal_safe_write(buf.substr(pos, tail_length), false);
   td::signal_safe_write(buf.substr(0, pos), false);
   td::signal_safe_write("\n", false);
   td::signal_safe_write("------------------------\n");
 }
 
+static std::atomic_bool has_failed{false};
+
 static void dump_stacktrace_signal_handler(int sig) {
+  if (has_failed) {
+    return;
+  }
   td::Stacktrace::print_to_stderr();
 }
 
 static void fail_signal_handler(int sig) {
+  has_failed = true;
   td::signal_safe_write_signal_number(sig);
   td::Stacktrace::PrintOptions options;
   options.use_gdb = true;
@@ -107,67 +111,15 @@ static void change_verbosity_level_signal_handler(int sig) {
 static std::atomic_flag need_dump_log;
 
 static void dump_log_signal_handler(int sig) {
+  if (has_failed) {
+    return;
+  }
   need_dump_log.clear();
 }
 
 static void sigsegv_signal_handler(int signum, void *addr) {
   td::signal_safe_write_pointer(addr);
   fail_signal_handler(signum);
-}
-
-static void dump_statistics(const std::shared_ptr<SharedData> &shared_data,
-                            const std::shared_ptr<td::NetQueryStats> &net_query_stats) {
-  if (is_memprof_on()) {
-    LOG(WARNING) << "Memory dump:";
-    td::vector<AllocInfo> v;
-    dump_alloc([&](const AllocInfo &info) { v.push_back(info); });
-    std::sort(v.begin(), v.end(), [](const AllocInfo &a, const AllocInfo &b) { return a.size > b.size; });
-    size_t total_size = 0;
-    size_t other_size = 0;
-    int count = 0;
-    for (auto &info : v) {
-      if (count++ < 50) {
-        LOG(WARNING) << td::format::as_size(info.size) << td::format::as_array(info.backtrace);
-      } else {
-        other_size += info.size;
-      }
-      total_size += info.size;
-    }
-    LOG(WARNING) << td::tag("other", td::format::as_size(other_size));
-    LOG(WARNING) << td::tag("total size", td::format::as_size(total_size));
-    LOG(WARNING) << td::tag("total traces", get_ht_size());
-    LOG(WARNING) << td::tag("fast_backtrace_success_rate", get_fast_backtrace_success_rate());
-  }
-  auto r_mem_stat = td::mem_stat();
-  if (r_mem_stat.is_ok()) {
-    auto mem_stat = r_mem_stat.move_as_ok();
-    LOG(WARNING) << td::tag("rss", td::format::as_size(mem_stat.resident_size_));
-    LOG(WARNING) << td::tag("vm", td::format::as_size(mem_stat.virtual_size_));
-    LOG(WARNING) << td::tag("rss_peak", td::format::as_size(mem_stat.resident_size_peak_));
-    LOG(WARNING) << td::tag("vm_peak", td::format::as_size(mem_stat.virtual_size_peak_));
-  }
-  LOG(WARNING) << td::tag("buffer_mem", td::format::as_size(td::BufferAllocator::get_buffer_mem()));
-  LOG(WARNING) << td::tag("buffer_slice_size", td::format::as_size(td::BufferAllocator::get_buffer_slice_size()));
-
-  auto query_list_size = shared_data->query_list_size_;
-  auto query_count = shared_data->query_count_.load();
-  LOG(WARNING) << td::tag("pending queries", query_count) << td::tag("pending requests", query_list_size);
-
-  td::uint64 i = 0;
-  bool was_gap = false;
-  for (auto end = &shared_data->query_list_, cur = end->prev; cur != end; cur = cur->prev, i++) {
-    if (i < 20 || i > query_list_size - 20 || i % (query_list_size / 50 + 1) == 0) {
-      if (was_gap) {
-        LOG(WARNING) << "...";
-        was_gap = false;
-      }
-      LOG(WARNING) << static_cast<const Query &>(*cur);
-    } else {
-      was_gap = true;
-    }
-  }
-
-  td::dump_pending_network_queries(*net_query_stats);
 }
 
 int main(int argc, char *argv[]) {
@@ -191,16 +143,16 @@ int main(int argc, char *argv[]) {
   td::set_signal_handler(td::SignalType::Other, fail_signal_handler).ensure();
   td::set_extended_signal_handler(td::SignalType::Error, sigsegv_signal_handler).ensure();
 
-  td::set_runtime_signal_handler(0, change_verbosity_level_signal_handler).ensure();
-  td::set_runtime_signal_handler(1, dump_log_signal_handler).ensure();
-  td::set_runtime_signal_handler(2, dump_stacktrace_signal_handler).ensure();
+  td::set_real_time_signal_handler(0, change_verbosity_level_signal_handler).ensure();
+  td::set_real_time_signal_handler(1, dump_log_signal_handler).ensure();
+  td::set_real_time_signal_handler(2, dump_stacktrace_signal_handler).ensure();
 
   td::init_openssl_threads();
 
   auto start_time = td::Time::now();
   auto shared_data = std::make_shared<SharedData>();
   auto parameters = std::make_unique<ClientParameters>();
-  parameters->version_ = "6.2";
+  parameters->version_ = "6.3.2";
   parameters->shared_data_ = shared_data;
   parameters->start_time_ = start_time;
   auto net_query_stats = td::create_net_query_stats();
@@ -222,6 +174,8 @@ int main(int argc, char *argv[]) {
   td::string username;
   td::string groupname;
   td::uint64 max_connections = 0;
+  td::uint64 cpu_affinity = 0;
+  td::uint64 main_thread_affinity = 0;
   ClientManager::TokenRange token_range{0, 1};
 
   parameters->api_id_ = [](auto x) -> td::int32 {
@@ -319,6 +273,17 @@ int main(int argc, char *argv[]) {
   options.add_option('g', "groupname", "effective group name to switch to", td::OptionParser::parse_string(groupname));
   options.add_checked_option('c', "max-connections", "maximum number of open file descriptors",
                              td::OptionParser::parse_integer(max_connections));
+#if TD_HAVE_THREAD_AFFINITY
+  options.add_checked_option('\0', "cpu-affinity", "CPU affinity as 64-bit mask (defaults to all available CPUs)",
+                             td::OptionParser::parse_integer(cpu_affinity));
+  options.add_checked_option(
+      '\0', "main-thread-affinity",
+      "CPU affinity of the main thread as 64-bit mask (defaults to the value of the option --cpu-affinity)",
+      td::OptionParser::parse_integer(main_thread_affinity));
+#else
+  (void)cpu_affinity;
+  (void)main_thread_affinity;
+#endif
 
 
   options.add_checked_option('\0', "max-batch-operations", PSLICE() << "maximum number of batch operations (default: " << parameters->max_batch_operations << ")",
@@ -375,10 +340,29 @@ int main(int argc, char *argv[]) {
   log.set_second(&memory_log);
   td::log_interface = &log;
 
-  td::FileLog file_log;
-  td::TsLog ts_log(&file_log);
+  td::AsyncFileLog file_log;
 
   auto init_status = [&] {
+#if TD_HAVE_THREAD_AFFINITY
+    if (main_thread_affinity == 0) {
+      main_thread_affinity = cpu_affinity;
+    }
+    if (main_thread_affinity != 0) {
+      auto initial_mask = td::thread::get_affinity_mask(td::this_thread::get_id());
+      if (initial_mask == 0) {
+        return td::Status::Error("Failed to get current thread affinity");
+      }
+      if (cpu_affinity != 0) {
+        TRY_STATUS_PREFIX(td::thread::set_affinity_mask(td::this_thread::get_id(), cpu_affinity),
+                          "Can't set CPU affinity mask: ");
+      } else {
+        cpu_affinity = initial_mask;
+      }
+      TRY_STATUS_PREFIX(td::thread::set_affinity_mask(td::this_thread::get_id(), main_thread_affinity),
+                        "Can't set main thread CPU affinity mask: ");
+    }
+#endif
+
     if (max_connections != 0) {
       TRY_STATUS_PREFIX(td::set_resource_limit(td::ResourceLimitType::NoFile, max_connections),
                         "Can't set file descriptor limit: ");
@@ -392,7 +376,7 @@ int main(int argc, char *argv[]) {
       TRY_RESULT_PREFIX_ASSIGN(working_directory, td::realpath(working_directory, true),
                                "Invalid working directory specified: ");
       if (working_directory.empty()) {
-        return td::Status::Error("Working directory can't be empty");
+        return td::Status::Error("Empty path specified as working directory");
       }
       if (working_directory.back() != TD_DIR_SLASH) {
         working_directory += TD_DIR_SLASH;
@@ -448,13 +432,13 @@ int main(int argc, char *argv[]) {
         log_file_path = working_directory + log_file_path;
       }
       TRY_STATUS_PREFIX(file_log.init(log_file_path, log_max_file_size), "Can't open log file: ");
-      log.set_first(&ts_log);
+      log.set_first(&file_log);
     }
 
     return td::Status::OK();
   }();
   if (init_status.is_error()) {
-    LOG(PLAIN) << init_status.error().message();
+    LOG(PLAIN) << init_status.message();
     LOG(PLAIN) << options;
     return 1;
   }
@@ -479,48 +463,58 @@ int main(int argc, char *argv[]) {
   //              << (td::GitInfo::is_dirty() ? "(dirty)" : "") << " started";
   LOG(WARNING) << "Bot API " << parameters->version_ << " server started";
 
-  const int threads_n = 5;  // +3 for Td, one for slow HTTP connections and one for DNS resolving
-  td::ConcurrentScheduler sched;
-  sched.init(threads_n);
+  // +3 threads for Td
+  // one thread for ClientManager and all Clients
+  // one thread for watchdogs
+  // one thread for slow HTTP connections
+  // one thread for DNS resolving
+  const int thread_count = 7;
+  td::ConcurrentScheduler sched(thread_count, cpu_affinity);
 
   td::GetHostByNameActor::Options get_host_by_name_options;
-  get_host_by_name_options.scheduler_id = threads_n;
+  get_host_by_name_options.scheduler_id = thread_count;
   parameters->get_host_by_name_actor_id_ =
       sched.create_actor_unsafe<td::GetHostByNameActor>(0, "GetHostByName", std::move(get_host_by_name_options))
           .release();
 
   auto client_manager =
-      sched.create_actor_unsafe<ClientManager>(0, "ClientManager", std::move(parameters), token_range).release();
+      sched.create_actor_unsafe<ClientManager>(thread_count - 3, "ClientManager", std::move(parameters), token_range)
+          .release();
+
   sched
       .create_actor_unsafe<HttpServer>(
-          0, "HttpServer", http_ip_address, http_port,
+          thread_count - 3, "HttpServer", http_ip_address, http_port,
           [client_manager, shared_data] {
             return td::ActorOwn<td::HttpInboundConnection::Callback>(
                 td::create_actor<HttpConnection>("HttpConnection", client_manager, shared_data));
           })
       .release();
+
   if (http_stat_port != 0) {
     sched
         .create_actor_unsafe<HttpServer>(
-            0, "HttpStatsServer", http_stat_ip_address, http_stat_port,
+            thread_count - 3, "HttpStatsServer", http_stat_ip_address, http_stat_port,
             [client_manager] {
               return td::ActorOwn<td::HttpInboundConnection::Callback>(
                   td::create_actor<HttpStatConnection>("HttpStatConnection", client_manager));
             })
         .release();
   }
+
+  constexpr double WATCHDOG_TIMEOUT = 0.5;
+  auto watchdog_id =
+      sched.create_actor_unsafe<Watchdog>(thread_count - 2, "Watchdog", td::this_thread::get_id(), WATCHDOG_TIMEOUT);
+
   sched.start();
 
+  double next_watchdog_kick_time = start_time;
   double next_cron_time = start_time;
   double last_dump_time = start_time - 1000.0;
-  double last_tqueue_gc_time = start_time - 1000.0;
-  td::int64 tqueue_deleted_events = 0;
-  td::int64 last_tqueue_deleted_events = 0;
   bool close_flag = false;
   std::atomic_bool can_quit{false};
   ServerCpuStat::instance();  // create ServerCpuStat instance
   while (true) {
-    sched.run_main(next_cron_time - td::Time::now());
+    sched.run_main(td::min(next_cron_time, next_watchdog_kick_time) - td::Time::now());
 
     if (!need_reopen_log.test_and_set()) {
       td::log_interface->after_rotation();
@@ -533,9 +527,9 @@ int main(int argc, char *argv[]) {
       }
 
       LOG(WARNING) << "Stopping engine with uptime " << (td::Time::now() - start_time) << " seconds by a signal";
-      dump_statistics(shared_data, net_query_stats);
       close_flag = true;
       auto guard = sched.get_main_guard();
+      watchdog_id.reset();
       send_closure(client_manager, &ClientManager::close, td::PromiseCreator::lambda([&can_quit](td::Unit) {
                      can_quit.store(true);
                      td::Scheduler::instance()->yield();
@@ -562,7 +556,8 @@ int main(int argc, char *argv[]) {
 
     if (!need_dump_log.test_and_set()) {
       print_log();
-      dump_statistics(shared_data, net_query_stats);
+      auto guard = sched.get_main_guard();
+      send_closure(client_manager, &ClientManager::dump_statistics);
     }
 
     double now = td::Time::now();
@@ -574,29 +569,23 @@ int main(int argc, char *argv[]) {
       ServerCpuStat::update(now);
     }
 
-    if (now > last_tqueue_gc_time + 60.0) {
-      auto unix_time = shared_data->get_unix_time(now);
-      LOG(INFO) << "Run TQueue GC at " << unix_time;
-      last_tqueue_gc_time = now;
+    if (now >= start_time + 600) {
       auto guard = sched.get_main_guard();
-      auto deleted_events = shared_data->tqueue_->run_gc(unix_time);
-      LOG(INFO) << "TQueue GC deleted " << deleted_events << " events";
-
-      tqueue_deleted_events += deleted_events;
-      if (tqueue_deleted_events > last_tqueue_deleted_events + 10000) {
-        LOG(WARNING) << "TQueue GC already deleted " << tqueue_deleted_events << " events since the start";
-        last_tqueue_deleted_events = tqueue_deleted_events;
-      }
+      send_closure(watchdog_id, &Watchdog::kick);
+      next_watchdog_kick_time = now + WATCHDOG_TIMEOUT / 2;
     }
 
     if (now > last_dump_time + 300.0) {
       last_dump_time = now;
-      dump_statistics(shared_data, net_query_stats);
+      auto guard = sched.get_main_guard();
+      send_closure(client_manager, &ClientManager::dump_statistics);
     }
   }
 
   LOG(WARNING) << "--------------------FINISH ENGINE--------------------";
-  CHECK(net_query_stats.use_count() == 1);
+  if (net_query_stats.use_count() != 1) {
+    LOG(ERROR) << "NetQueryStats have leaked";
+  }
   net_query_stats = nullptr;
   sched.finish();
   SET_VERBOSITY_LEVEL(VERBOSITY_NAME(FATAL));

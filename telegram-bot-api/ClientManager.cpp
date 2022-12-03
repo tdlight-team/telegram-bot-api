@@ -6,7 +6,6 @@
 //
 #include "telegram-bot-api/ClientManager.h"
 
-#include "telegram-bot-api/Client.h"
 #include "telegram-bot-api/ClientParameters.h"
 #include "telegram-bot-api/WebhookActor.h"
 #include "telegram-bot-api/StatsJson.h"
@@ -31,6 +30,7 @@
 #include "td/utils/Parser.h"
 #include "td/utils/port/IPAddress.h"
 #include "td/utils/port/Stat.h"
+#include "td/utils/port/thread.h"
 #include "td/utils/Slice.h"
 #include "td/utils/SliceBuilder.h"
 #include "td/utils/StackAllocator.h"
@@ -39,7 +39,10 @@
 #include "td/utils/Random.h"
 #include "td/utils/base64.h"
 
-#include <map>
+#include "memprof/memprof.h"
+
+#include <algorithm>
+#include <atomic>
 #include <tuple>
 
 namespace telegram_bot_api {
@@ -51,6 +54,8 @@ void ClientManager::close(td::Promise<td::Unit> &&promise) {
   }
 
   close_flag_ = true;
+  watchdog_id_.reset();
+  dump_statistics();
   auto ids = clients_.ids();
   for (auto id : ids) {
     auto *client_info = clients_.get(id);
@@ -262,7 +267,8 @@ void ClientManager::get_stats(td::Promise<td::BufferSlice> promise,
 
   auto now = td::Time::now();
   td::int32 active_bot_count = 0;
-  std::multimap<td::int64, td::uint64> top_bot_ids;
+  td::vector<std::pair<td::int64, td::uint64>> top_bot_ids;
+  size_t max_bots = 50;
   for (auto id : clients_.ids()) {
     auto *client_info = clients_.get(id);
     CHECK(client_info);
@@ -275,15 +281,17 @@ void ClientManager::get_stats(td::Promise<td::BufferSlice> promise,
       continue;
     }
 
-    auto stats = client_info->stat_.as_vector(now);
-    double score = 0.0;
-    for (auto &stat : stats) {
-      if (stat.key_ == "update_count" || stat.key_ == "request_count") {
-        score -= td::to_double(stat.value_);
-      }
+    auto score = static_cast<td::int64>(client_info->stat_.get_score(now) * -1e9);
+    if (score == 0 && top_bot_ids.size() >= max_bots) {
+      continue;
     }
-    top_bot_ids.emplace(static_cast<td::int64>(score * 1e9), id);
+    top_bot_ids.emplace_back(score, id);
   }
+  if (top_bot_ids.size() < max_bots) {
+    max_bots = top_bot_ids.size();
+  }
+  std::partial_sort(top_bot_ids.begin(), top_bot_ids.begin() + max_bots, top_bot_ids.end());
+  top_bot_ids.resize(max_bots);
 
   if(!as_json) {
     sb << stat_.get_description() << '\n';
@@ -359,10 +367,12 @@ void ClientManager::get_stats(td::Promise<td::BufferSlice> promise,
     for (std::pair<td::int64, td::uint64>  top_bot_id : top_bot_ids) {
       auto client_info = clients_.get(top_bot_id.second);
       CHECK(client_info);
-      ServerBotInfo bot_info = client_info->client_->get_actor_unsafe()->get_bot_info();
+      ServerBotInfo bot_info = client_info->client_.get_actor_unsafe()->get_bot_info();
+      auto active_request_count = client_info->stat_.get_active_request_count();
+      auto active_file_upload_bytes = client_info->stat_.get_active_file_upload_bytes();
       auto stats = client_info->stat_.as_json_ready_vector(now);
       JsonStatsBotAdvanced bot(
-          std::move(top_bot_id), std::move(bot_info), std::move(stats), parameters_->stats_hide_sensible_data_, now
+          std::move(top_bot_id), std::move(bot_info), active_request_count, active_file_upload_bytes, std::move(stats), parameters_->stats_hide_sensible_data_, now
         );
       bots.push_back(bot);
     }
@@ -372,8 +382,9 @@ void ClientManager::get_stats(td::Promise<td::BufferSlice> promise,
     for (auto top_bot_id : top_bot_ids) {
       auto *client_info = clients_.get(top_bot_id.second);
       CHECK(client_info);
-      auto bot_info = client_info->client_->get_actor_unsafe()->get_bot_info();
-
+      auto bot_info = client_info->client_.get_actor_unsafe()->get_bot_info();
+      auto active_request_count = client_info->stat_.get_active_request_count();
+      auto active_file_upload_bytes = client_info->stat_.get_active_file_upload_bytes();
       sb << '\n';
       sb << "id\t" << bot_info.id_ << '\n';
       sb << "uptime\t" << now - bot_info.start_time_ << '\n';
@@ -381,18 +392,30 @@ void ClientManager::get_stats(td::Promise<td::BufferSlice> promise,
         sb << "token\t" << bot_info.token_ << '\n';
       }
       sb << "username\t" << bot_info.username_ << '\n';
-      if (!parameters_->stats_hide_sensible_data_) {
-        sb << "webhook\t" << bot_info.webhook_ << '\n';
-      } else if (bot_info.webhook_.empty()) {
-        sb << "webhook disabled" << '\n';
-      } else {
-        sb << "webhook enabled" << '\n';
+      if (active_request_count != 0) {
+        sb << "active_request_count\t" << active_request_count << '\n';
       }
-      sb << "has_custom_certificate\t" << bot_info.has_webhook_certificate_ << '\n';
+      if (active_file_upload_bytes != 0) {
+        sb << "active_file_upload_bytes\t" << active_file_upload_bytes << '\n';
+      }
+      if (!bot_info.webhook_.empty()) {
+          if (!parameters_->stats_hide_sensible_data_) {
+            sb << "webhook\t" << bot_info.webhook_ << '\n';
+          } else {
+            sb << "webhook enabled" << '\n';
+          }
+          if (bot_info.has_webhook_certificate_) {
+            sb << "has_custom_certificate\t" << bot_info.has_webhook_certificate_ << '\n';
+          }
+          if (bot_info.webhook_max_connections_ != parameters_->default_max_webhook_connections_) {
+            sb << "webhook_max_connections\t" << bot_info.webhook_max_connections_ << '\n';
+          }
+      }
       sb << "head_update_id\t" << bot_info.head_update_id_ << '\n';
-      sb << "tail_update_id\t" << bot_info.tail_update_id_ << '\n';
-      sb << "pending_update_count\t" << bot_info.pending_update_count_ << '\n';
-      sb << "webhook_max_connections\t" << bot_info.webhook_max_connections_ << '\n';
+      if (bot_info.pending_update_count_ != 0) {
+        sb << "tail_update_id\t" << bot_info.tail_update_id_ << '\n';
+        sb << "pending_update_count\t" << bot_info.pending_update_count_ << '\n';
+      }
 
       auto stats = client_info->stat_.as_vector(now);
       for (auto &stat : stats) {
@@ -419,9 +442,7 @@ td::int64 ClientManager::get_tqueue_id(td::int64 user_id, bool is_test_dc) {
 
 void ClientManager::start_up() {
   //NB: the same scheduler as for database in Td
-  auto current_scheduler_id = td::Scheduler::instance()->sched_id();
-  auto scheduler_count = td::Scheduler::instance()->sched_count();
-  auto scheduler_id = td::min(current_scheduler_id + 1, scheduler_count - 1);
+  auto scheduler_id = 1;
 
   // init tqueue
   {
@@ -459,13 +480,14 @@ void ClientManager::start_up() {
 
     LOG(WARNING) << "Loaded " << loaded_event_count << " TQueue events in " << (td::Time::now() - load_start_time)
                  << " seconds";
+    next_tqueue_gc_time_ = td::Time::now() + 600;
   }
 
   // init webhook_db and user_db
   auto concurrent_webhook_db = td::make_unique<td::BinlogKeyValue<td::ConcurrentBinlog>>();
   auto status = concurrent_webhook_db->init(parameters_->working_directory_ + "webhooks_db.binlog", td::DbKey::empty(),
                                             scheduler_id);
-  LOG_IF(FATAL, status.is_error()) << "Can't open webhooks_db.binlog " << status.error();
+  LOG_IF(FATAL, status.is_error()) << "Can't open webhooks_db.binlog " << status;
   parameters_->shared_data_->webhook_db_ = std::move(concurrent_webhook_db);
 
   auto concurrent_user_db = td::make_unique<td::BinlogKeyValue<td::ConcurrentBinlog>>();
@@ -486,6 +508,10 @@ void ClientManager::start_up() {
     send_closure_later(actor_id(this), &ClientManager::send, std::move(query));
   }
 
+  // launch watchdog
+  watchdog_id_ = td::create_actor_on_scheduler<Watchdog>(
+      "ManagerWatchdog", td::Scheduler::instance()->sched_count() - 3, td::this_thread::get_id(), WATCHDOG_TIMEOUT);
+  set_timeout_in(600.0);
 }
 
 PromisedQueryPtr ClientManager::get_webhook_restore_query(td::Slice token, bool is_user, td::Slice webhook_info,
@@ -547,6 +573,61 @@ PromisedQueryPtr ClientManager::get_webhook_restore_query(td::Slice token, bool 
   return PromisedQueryPtr(query.release(), PromiseDeleter(td::Promise<td::unique_ptr<Query>>()));
 }
 
+void ClientManager::dump_statistics() {
+  if (is_memprof_on()) {
+    LOG(WARNING) << "Memory dump:";
+    td::vector<AllocInfo> v;
+    dump_alloc([&](const AllocInfo &info) { v.push_back(info); });
+    std::sort(v.begin(), v.end(), [](const AllocInfo &a, const AllocInfo &b) { return a.size > b.size; });
+    size_t total_size = 0;
+    size_t other_size = 0;
+    int count = 0;
+    for (auto &info : v) {
+      if (count++ < 50) {
+        LOG(WARNING) << td::format::as_size(info.size) << td::format::as_array(info.backtrace);
+      } else {
+        other_size += info.size;
+      }
+      total_size += info.size;
+    }
+    LOG(WARNING) << td::tag("other", td::format::as_size(other_size));
+    LOG(WARNING) << td::tag("total size", td::format::as_size(total_size));
+    LOG(WARNING) << td::tag("total traces", get_ht_size());
+    LOG(WARNING) << td::tag("fast_backtrace_success_rate", get_fast_backtrace_success_rate());
+  }
+  auto r_mem_stat = td::mem_stat();
+  if (r_mem_stat.is_ok()) {
+    auto mem_stat = r_mem_stat.move_as_ok();
+    LOG(WARNING) << td::tag("rss", td::format::as_size(mem_stat.resident_size_));
+    LOG(WARNING) << td::tag("vm", td::format::as_size(mem_stat.virtual_size_));
+    LOG(WARNING) << td::tag("rss_peak", td::format::as_size(mem_stat.resident_size_peak_));
+    LOG(WARNING) << td::tag("vm_peak", td::format::as_size(mem_stat.virtual_size_peak_));
+  }
+  LOG(WARNING) << td::tag("buffer_mem", td::format::as_size(td::BufferAllocator::get_buffer_mem()));
+  LOG(WARNING) << td::tag("buffer_slice_size", td::format::as_size(td::BufferAllocator::get_buffer_slice_size()));
+
+  const auto &shared_data = parameters_->shared_data_;
+  auto query_list_size = shared_data->query_list_size_.load(std::memory_order_relaxed);
+  auto query_count = shared_data->query_count_.load(std::memory_order_relaxed);
+  LOG(WARNING) << td::tag("pending queries", query_count) << td::tag("pending requests", query_list_size);
+
+  td::uint64 i = 0;
+  bool was_gap = false;
+  for (auto end = &shared_data->query_list_, cur = end->prev; cur != end; cur = cur->prev, i++) {
+    if (i < 20 || i > query_list_size - 20 || i % (query_list_size / 50 + 1) == 0) {
+      if (was_gap) {
+        LOG(WARNING) << "...";
+        was_gap = false;
+      }
+      LOG(WARNING) << static_cast<const Query &>(*cur);
+    } else {
+      was_gap = true;
+    }
+  }
+
+  td::dump_pending_network_queries(*parameters_->net_query_stats_);
+}
+
 void ClientManager::raw_event(const td::Event::Raw &event) {
   auto id = get_link_token();
   auto *info = clients_.get(id);
@@ -559,6 +640,28 @@ void ClientManager::raw_event(const td::Event::Raw &event) {
     CHECK(value > 0);
     if (--value == 0) {
       active_client_count_.erase(info->tqueue_id_);
+    }
+  }
+}
+
+void ClientManager::timeout_expired() {
+  send_closure(watchdog_id_, &Watchdog::kick);
+  set_timeout_in(WATCHDOG_TIMEOUT / 2);
+
+  double now = td::Time::now();
+  if (now > next_tqueue_gc_time_) {
+    auto unix_time = parameters_->shared_data_->get_unix_time(now);
+    LOG(INFO) << "Run TQueue GC at " << unix_time;
+    td::int64 deleted_events;
+    bool is_finished;
+    std::tie(deleted_events, is_finished) = parameters_->shared_data_->tqueue_->run_gc(unix_time);
+    LOG(INFO) << "TQueue GC deleted " << deleted_events << " events";
+    next_tqueue_gc_time_ = td::Time::now() + (is_finished ? 60.0 : 1.0);
+
+    tqueue_deleted_events_ += deleted_events;
+    if (tqueue_deleted_events_ > last_tqueue_deleted_events_ + 10000) {
+      LOG(WARNING) << "TQueue GC already deleted " << tqueue_deleted_events_ << " events since the start";
+      last_tqueue_deleted_events_ = tqueue_deleted_events_;
     }
   }
 }
@@ -599,5 +702,7 @@ void ClientManager::finish_close() {
   }
   stop();
 }
+
+constexpr double ClientManager::WATCHDOG_TIMEOUT;
 
 }  // namespace telegram_bot_api

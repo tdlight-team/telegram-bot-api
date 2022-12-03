@@ -46,9 +46,9 @@ Query::Query(td::vector<td::BufferSlice> &&container, td::Slice token, bool is_u
   start_timestamp_ = td::Time::now();
   LOG(INFO) << "QUERY: create " << td::tag("ptr", this) << *this;
   if (shared_data_) {
-    shared_data_->query_count_++;
+    shared_data_->query_count_.fetch_add(1, std::memory_order_relaxed);
     if (method_ != "getupdates") {
-      shared_data_->query_list_size_++;
+      shared_data_->query_list_size_.fetch_add(1, std::memory_order_relaxed);
       shared_data_->query_list_.put(this);
     }
   }
@@ -136,7 +136,7 @@ void Query::send_response_stat() const {
     return;
   }
   send_closure(stat_actor_, &BotStatActor::add_event<ServerBotStat::Response>,
-               ServerBotStat::Response{state_ == State::OK, answer_.size()}, now);
+               ServerBotStat::Response{state_ == State::OK, answer_.size(), files_size()}, now);
 }
 
 }  // namespace telegram_bot_api

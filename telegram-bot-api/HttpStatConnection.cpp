@@ -15,7 +15,7 @@ namespace telegram_bot_api {
 
 void HttpStatConnection::handle(td::unique_ptr<td::HttpQuery> http_query,
                                 td::ActorOwn<td::HttpInboundConnection> connection) {
-  CHECK(connection_->empty());
+  CHECK(connection_.empty());
   connection_ = std::move(connection);
   td::Parser url_path_parser(http_query->url_path_);
   as_json_ = url_path_parser.try_skip("/json");

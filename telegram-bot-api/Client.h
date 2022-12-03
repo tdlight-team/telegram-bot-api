@@ -26,6 +26,7 @@
 #include "td/utils/Promise.h"
 #include "td/utils/Slice.h"
 #include "td/utils/Status.h"
+#include "td/utils/WaitFreeHashMap.h"
 
 #include <functional>
 #include <limits>
@@ -154,6 +155,9 @@ class Client final : public WebhookActor::Callback {
   class JsonChatMembers;
   class JsonChatMemberUpdated;
   class JsonChatJoinRequest;
+  class JsonForumTopicCreated;
+  class JsonForumTopicIsClosedToggled;
+  class JsonForumTopicInfo;
   class JsonGameHighScore;
   class JsonAddress;
   class JsonOrderInfo;
@@ -200,6 +204,7 @@ class Client final : public WebhookActor::Callback {
   class TdOnGetEditedMessageCallback;
   class TdOnGetCallbackQueryMessageCallback;
   class TdOnGetStickerSetCallback;
+  class TdOnGetForumTopicInfoCallback;
   class TdOnGetMenuButtonCallback;
   class TdOnGetMyCommandsCallback;
   class TdOnGetMyDefaultAdministratorRightsCallback;
@@ -281,6 +286,8 @@ class Client final : public WebhookActor::Callback {
   template <class OnSuccess>
   class TdOnCheckMessageCallback;
   template <class OnSuccess>
+  class TdOnCheckMessageThreadCallback;
+  template <class OnSuccess>
   class TdOnCheckRemoteFileIdCallback;
   template <class OnSuccess>
   class TdOnGetChatMemberCallback;
@@ -326,6 +333,10 @@ class Client final : public WebhookActor::Callback {
   template <class OnSuccess>
   void check_message(Slice chat_id_str, int64 message_id, bool allow_empty, AccessRights access_rights,
                      Slice message_type, PromisedQueryPtr query, OnSuccess on_success);
+
+  template <class OnSuccess>
+  void check_message_thread(int64 chat_id, int64 message_thread_id, int64 reply_to_message_id, PromisedQueryPtr query,
+                            OnSuccess on_success);
 
   template <class OnSuccess>
   void resolve_sticker_set(const td::string &sticker_set_name, PromisedQueryPtr query, OnSuccess on_success);
@@ -480,8 +491,7 @@ class Client final : public WebhookActor::Callback {
   td::Result<object_ptr<td_api::InputMessageContent>> get_input_media(const Query *query, td::JsonValue &&input_media,
                                                                       bool for_album) const;
 
-  td::Result<object_ptr<td_api::InputMessageContent>> get_input_media(const Query *query, Slice field_name,
-                                                                      bool for_album) const;
+  td::Result<object_ptr<td_api::InputMessageContent>> get_input_media(const Query *query, Slice field_name) const;
 
   td::Result<td::vector<object_ptr<td_api::InputMessageContent>>> get_input_message_contents(const Query *query,
                                                                                              Slice field_name) const;
@@ -489,7 +499,7 @@ class Client final : public WebhookActor::Callback {
   td::Result<td::vector<object_ptr<td_api::InputMessageContent>>> get_input_message_contents(
       const Query *query, td::JsonValue &&value) const;
 
-  static td::Result<object_ptr<td_api::inputMessageInvoice>> get_input_message_invoice(const Query *query);
+  td::Result<object_ptr<td_api::inputMessageInvoice>> get_input_message_invoice(const Query *query) const;
 
   static object_ptr<td_api::messageSendOptions> get_message_send_options(bool disable_notification,
                                                                          bool protect_content,
@@ -533,6 +543,8 @@ class Client final : public WebhookActor::Callback {
   void on_message_send_failed(int64 chat_id, int64 old_message_id, int64 new_message_id, Status result);
 
   static bool init_methods();
+
+  static bool is_local_method(Slice method);
 
   void on_cmd(PromisedQueryPtr query);
 
@@ -595,6 +607,13 @@ class Client final : public WebhookActor::Callback {
   Status process_unpin_all_chat_messages_query(PromisedQueryPtr &query);
   Status process_set_chat_sticker_set_query(PromisedQueryPtr &query);
   Status process_delete_chat_sticker_set_query(PromisedQueryPtr &query);
+  Status process_get_forum_topic_icon_stickers_query(PromisedQueryPtr &query);
+  Status process_create_forum_topic_query(PromisedQueryPtr &query);
+  Status process_edit_forum_topic_query(PromisedQueryPtr &query);
+  Status process_close_forum_topic_query(PromisedQueryPtr &query);
+  Status process_reopen_forum_topic_query(PromisedQueryPtr &query);
+  Status process_delete_forum_topic_query(PromisedQueryPtr &query);
+  Status process_unpin_all_forum_topic_messages_query(PromisedQueryPtr &query);
   Status process_get_chat_member_query(PromisedQueryPtr &query);
   Status process_get_chat_administrators_query(PromisedQueryPtr &query);
   Status process_get_chat_member_count_query(PromisedQueryPtr &query);
@@ -672,6 +691,8 @@ class Client final : public WebhookActor::Callback {
   int32 get_webhook_max_connections(const Query *query) const;
   static bool get_webhook_fix_ip_address(const Query *query);
   void do_set_webhook(PromisedQueryPtr query, bool was_deleted);
+  void on_webhook_certificate_copied(Status status);
+  void finish_set_webhook(PromisedQueryPtr query);
   void save_webhook() const;
   td::string get_webhook_certificate_path() const;
 
@@ -697,6 +718,8 @@ class Client final : public WebhookActor::Callback {
   void on_resolve_bot_username(const td::string &username, int64 user_id);
 
   void abort_long_poll(bool from_set_webhook);
+
+  void fail_query_closing(PromisedQueryPtr &&query) const;
 
   void fail_query_conflict(Slice message, PromisedQueryPtr &&query);
 
@@ -725,8 +748,10 @@ class Client final : public WebhookActor::Callback {
 
     td::string first_name;
     td::string last_name;
-    td::string username;
+    td::vector<td::string> active_usernames;
+    td::string editable_username;
     td::string language_code;
+    int64 emoji_status_custom_emoji_id;
 
     object_ptr<td_api::chatPhoto> photo;
     td::string bio;
@@ -775,7 +800,8 @@ class Client final : public WebhookActor::Callback {
   const GroupInfo *get_group_info(int64 group_id) const;
 
   struct SupergroupInfo {
-    td::string username;
+    td::vector<td::string> active_usernames;
+    td::string editable_username;
     object_ptr<td_api::chatPhoto> photo;
     td::string description;
     td::string invite_link;
@@ -786,6 +812,7 @@ class Client final : public WebhookActor::Callback {
     object_ptr<td_api::chatLocation> location;
     object_ptr<td_api::ChatMemberStatus> status;
     bool is_supergroup = false;
+    bool is_forum = false;
     bool can_set_sticker_set = false;
     bool has_location = false;
     bool join_to_send_messages = false;
@@ -836,6 +863,7 @@ class Client final : public WebhookActor::Callback {
     int64 sender_user_id = 0;
     int64 sender_chat_id = 0;
     int64 chat_id = 0;
+    int64 message_thread_id = 0;
     int32 date = 0;
     int32 edit_date = 0;
     int64 initial_chat_id = 0;
@@ -847,7 +875,6 @@ class Client final : public WebhookActor::Callback {
     td::string initial_sender_name;
     td::string author_signature;
     int64 reply_to_message_id = 0;
-    int64 message_thread_id = 0;
     int64 media_album_id = 0;
     int64 via_bot_user_id = 0;
     object_ptr<td_api::MessageContent> content;
@@ -863,6 +890,7 @@ class Client final : public WebhookActor::Callback {
 
     bool can_be_saved = false;
     bool is_automatic_forward = false;
+    bool is_topic_message = false;
     mutable bool is_reply_to_message_deleted = false;
     mutable bool is_content_changed = false;
   };
@@ -889,7 +917,7 @@ class Client final : public WebhookActor::Callback {
 
   bool have_sticker_set_name(int64 sticker_set_id) const;
 
-  Slice get_sticker_set_name(int64 sticker_set_id) const;
+  td::string get_sticker_set_name(int64 sticker_set_id) const;
 
   int64 choose_added_member_id(const td_api::messageChatAddMembers *message_add_members) const;
 
@@ -910,7 +938,8 @@ class Client final : public WebhookActor::Callback {
   static void json_store_user_status(td::JsonObjectScope &object, const td_api::UserStatus *userStatus);
 
   void remove_replies_to_message(int64 chat_id, int64 reply_to_message_id, bool only_from_cache);
-  void delete_message(int64 chat_id, int64 message_id, bool only_from_cache);
+
+  td::unique_ptr<MessageInfo> delete_message(int64 chat_id, int64 message_id, bool only_from_cache);
 
   void add_new_message(object_ptr<td_api::message> &&message, bool is_edited);
   void process_new_message_queue(int64 chat_id);
@@ -1063,11 +1092,11 @@ class Client final : public WebhookActor::Callback {
 
   static td::FlatHashMap<td::string, Status (Client::*)(PromisedQueryPtr &query)> methods_;
 
-  td::FlatHashMap<FullMessageId, td::unique_ptr<MessageInfo>, FullMessageIdHash> messages_;  // message cache
-  td::FlatHashMap<int64, td::unique_ptr<UserInfo>> users_;                                   // user info cache
-  td::FlatHashMap<int64, td::unique_ptr<GroupInfo>> groups_;                                 // group info cache
-  td::FlatHashMap<int64, td::unique_ptr<SupergroupInfo>> supergroups_;                       // supergroup info cache
-  td::FlatHashMap<int64, td::unique_ptr<ChatInfo>> chats_;                                   // chat info cache
+  td::WaitFreeHashMap<FullMessageId, td::unique_ptr<MessageInfo>, FullMessageIdHash> messages_;
+  td::WaitFreeHashMap<int64, td::unique_ptr<UserInfo>> users_;
+  td::WaitFreeHashMap<int64, td::unique_ptr<GroupInfo>> groups_;
+  td::WaitFreeHashMap<int64, td::unique_ptr<SupergroupInfo>> supergroups_;
+  td::WaitFreeHashMap<int64, td::unique_ptr<ChatInfo>> chats_;
 
   td::FlatHashMap<FullMessageId, td::FlatHashSet<int64>, FullMessageIdHash>
       reply_message_ids_;  // message -> replies to it
@@ -1118,7 +1147,7 @@ class Client final : public WebhookActor::Callback {
   };
   td::FlatHashMap<int64, NewCallbackQueryQueue> new_callback_query_queues_;  // sender_user_id -> queue
 
-  td::FlatHashMap<int64, td::string> sticker_set_names_;
+  td::WaitFreeHashMap<int64, td::string> sticker_set_names_;
 
   int64 cur_temp_bot_user_id_ = 1;
   td::FlatHashMap<td::string, int64> bot_user_ids_;
@@ -1162,6 +1191,7 @@ class Client final : public WebhookActor::Callback {
   WebhookQueryType webhook_query_type_ = WebhookQueryType::Cancel;
   td::ActorOwn<WebhookActor> webhook_id_;
   PromisedQueryPtr webhook_set_query_;
+  PromisedQueryPtr active_webhook_set_query_;
   td::string webhook_url_;
   double webhook_set_time_ = 0;
   int32 webhook_max_connections_ = 0;
@@ -1187,6 +1217,13 @@ class Client final : public WebhookActor::Callback {
   double next_get_updates_conflict_time_ = 0;
 
   td::uint64 webhook_generation_ = 1;
+
+  UpdateType delayed_update_type_ = UpdateType::Size;
+  int64 delayed_chat_id_ = 0;
+  int32 delayed_min_date_ = 0;
+  int32 delayed_max_date_ = 0;
+  int32 delayed_max_time_ = 0;
+  size_t delayed_update_count_ = 0;
 
   std::shared_ptr<const ClientParameters> parameters_;
 

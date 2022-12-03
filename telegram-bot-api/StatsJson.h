@@ -200,10 +200,13 @@ class JsonStatsBotAdvanced : public JsonStatsBot {
  public:
   explicit JsonStatsBotAdvanced(std::pair<td::int64, td::uint64> score_id_pair,
                                 ServerBotInfo bot,
+                                td::int64 active_request_count,
+                                td::int64 active_file_upload_bytes,
                                 td::vector<ServerBotStat> stats,
                                 const bool hide_sensible_data,
                                 const double now)
-      : JsonStatsBot(std::move(score_id_pair)), bot_(std::move(bot)), stats_(std::move(stats)),
+      : JsonStatsBot(std::move(score_id_pair)), bot_(std::move(bot)), active_request_count_(active_request_count),
+        active_file_upload_bytes_(active_file_upload_bytes), stats_(std::move(stats)),
         hide_sensible_data_(hide_sensible_data), now_(now) {
   }
   void store(td::JsonValueScope *scope) const {
@@ -235,6 +238,8 @@ class JsonStatsBotAdvanced : public JsonStatsBot {
   }
  private:
   ServerBotInfo bot_;
+  td::int64 active_request_count_;
+  td::int64 active_file_upload_bytes_;
   td::vector<ServerBotStat> stats_;
   const bool hide_sensible_data_;
   const double now_;
