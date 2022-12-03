@@ -9960,7 +9960,9 @@ td::Status Client::process_disable_proxy_query(PromisedQueryPtr &query) {
 
 td::Status Client::process_get_chats_query(PromisedQueryPtr &query) {
   CHECK_IS_USER();
-  send_request(make_object<td_api::getChats>(make_object<td_api::chatListMain>(), 100),
+  td::int32 limit = get_integer_arg(query.get(), "limit", 100, 0, 100);
+
+  send_request(make_object<td_api::getChats>(make_object<td_api::chatListMain>(), limit),
                td::make_unique<TdOnGetChatsCallback>(this, std::move(query)));
   return Status::OK();
 }
@@ -9969,8 +9971,9 @@ td::Status Client::process_get_common_chats_query(PromisedQueryPtr &query) {
   CHECK_IS_USER();
   TRY_RESULT(user_id, get_user_id(query.get()));
   td::int64 offset_chat_id = get_integer_arg(query.get(), "offset_chat_id", 0);
+  td::int32 limit = get_integer_arg(query.get(), "limit", 100, 0, 100);
 
-  send_request(make_object<td_api::getGroupsInCommon>(user_id, offset_chat_id, 100),
+  send_request(make_object<td_api::getGroupsInCommon>(user_id, offset_chat_id, limit),
                td::make_unique<TdOnGetChatsCallback>(this, std::move(query)));
   return Status::OK();
 }
