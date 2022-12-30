@@ -29,13 +29,13 @@ jobs:
 
           # Strip git ref prefix from version
           VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-        
+
           # Strip "v" prefix from tag name
           [[ "${{ github.ref }}" == "refs/tags/"* ]] && VERSION=$(echo $VERSION | sed -e 's/^v//')
-        
+
           # Use Docker `latest` tag convention
           [ "$VERSION" == "master" ] && VERSION=latest
- 
+
           # Convert IMAGE_TAG, HASH_VERSION and VERSION to lowercase (repository name must be lowercase)
           IMAGE_TAG=$(echo "$IMAGE_TAG" | awk '{print tolower($0)}')
           IMAGE_TAG_DH=$(echo "$IMAGE_TAG_DH" | awk '{print tolower($0)}')
@@ -80,7 +80,7 @@ jobs:
             ${{ runner.os }}-buildx-${{ env.SAFE_ARCH }}-
 
       - name: Login to ghcr registry
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         if: ${{ github.event_name != 'pull_request' }}
         with:
           registry: ghcr.io
@@ -88,7 +88,7 @@ jobs:
           password: ${{ secrets.GH_ACCESS_TOKEN }}
 
       - name: Login to Docker Hub registry
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         if: ${{ github.event_name != 'pull_request' }}
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -158,14 +158,14 @@ jobs:
           docker load --input image_linuxppc64le/linuxppc64le.tar
 
       - name: Login to ghcr registry
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ secrets.GH_USERNAME }}
           password: ${{ secrets.GH_ACCESS_TOKEN }}
 
       - name: Login to Docker Hub registry
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
