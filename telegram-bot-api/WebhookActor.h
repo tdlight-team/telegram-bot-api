@@ -12,6 +12,7 @@
 
 #include "td/net/HttpOutboundConnection.h"
 #include "td/net/HttpQuery.h"
+#include "td/net/SslCtx.h"
 #include "td/net/SslStream.h"
 
 #include "td/actor/actor.h"
@@ -21,6 +22,7 @@
 #include "td/utils/Container.h"
 #include "td/utils/FlatHashMap.h"
 #include "td/utils/FloodControlFast.h"
+#include "td/utils/HashTableUtils.h"
 #include "td/utils/HttpUrl.h"
 #include "td/utils/JsonBuilder.h"
 #include "td/utils/List.h"
@@ -31,7 +33,6 @@
 #include "td/utils/VectorQueue.h"
 
 #include <atomic>
-#include <functional>
 #include <memory>
 #include <set>
 #include <tuple>
@@ -54,13 +55,18 @@ class WebhookActor final : public td::HttpOutboundConnection::Callback {
   WebhookActor(td::ActorShared<Callback> callback, td::int64 tqueue_id, td::HttpUrl url, td::string cert_path,
                td::int32 max_connections, bool from_db_flag, td::string cached_ip_address, bool fix_ip_address,
                td::string secret_token, std::shared_ptr<const ClientParameters> parameters);
+  WebhookActor(const WebhookActor &) = delete;
+  WebhookActor &operator=(const WebhookActor &) = delete;
+  WebhookActor(WebhookActor &&) = delete;
+  WebhookActor &operator=(WebhookActor &&) = delete;
+  ~WebhookActor();
 
   void update();
 
   void close();
 
-  static td::int64 get_total_connections_count() {
-    return total_connections_count_;
+  static td::int64 get_total_connection_count() {
+    return total_connection_count_;
   }
 
  private:
@@ -69,14 +75,14 @@ class WebhookActor final : public td::HttpOutboundConnection::Callback {
   static constexpr int WEBHOOK_MAX_RESEND_TIMEOUT = 60;
   static constexpr int WEBHOOK_DROP_TIMEOUT = 60 * 60 * 23;
 
-  static std::atomic<td::uint64> total_connections_count_;
+  static std::atomic<td::uint64> total_connection_count_;
 
   td::ActorShared<Callback> callback_;
   td::int64 tqueue_id_;
   bool tqueue_empty_ = false;
   std::size_t last_pending_update_count_ = MIN_PENDING_UPDATES_WARNING;
   td::HttpUrl url_;
-  td::string cert_path_;
+  const td::string cert_path_;
   std::shared_ptr<const ClientParameters> parameters_;
 
   double last_error_time_ = 0;
@@ -122,8 +128,8 @@ class WebhookActor final : public td::HttpOutboundConnection::Callback {
   td::TQueue::EventId tqueue_offset_;
   std::size_t max_loaded_updates_ = 0;
   struct EventIdHash {
-    std::size_t operator()(td::TQueue::EventId event_id) const {
-      return std::hash<td::int32>()(event_id.value());
+    td::uint32 operator()(td::TQueue::EventId event_id) const {
+      return td::Hash<td::int32>()(event_id.value());
     }
   };
   td::FlatHashMap<td::TQueue::EventId, td::unique_ptr<Update>, EventIdHash> update_map_;
@@ -133,6 +139,7 @@ class WebhookActor final : public td::HttpOutboundConnection::Callback {
 
   double first_error_410_time_ = 0;
 
+  td::SslCtx ssl_ctx_;
   td::IPAddress ip_address_;
   td::int32 ip_generation_ = 0;
   double next_ip_address_resolve_time_ = 0;
@@ -170,11 +177,16 @@ class WebhookActor final : public td::HttpOutboundConnection::Callback {
   double last_success_time_ = 0;
   double wakeup_at_ = 0;
   bool last_update_was_successful_ = true;
+  td::int32 slow_scheduler_id_ = -1;
 
   void relax_wakeup_at(double wakeup_at, const char *source);
 
   void resolve_ip_address();
   void on_resolved_ip_address(td::Result<td::IPAddress> r_ip_address);
+
+  void on_ssl_context_created(td::Result<td::SslCtx> r_ssl_ctx);
+
+  td::Status create_webhook_error(td::Slice error_message, td::Status &&result, bool is_public);
 
   td::Result<td::SslStream> create_ssl_stream();
   td::Status create_connection() TD_WARN_UNUSED_RESULT;
@@ -202,7 +214,7 @@ class WebhookActor final : public td::HttpOutboundConnection::Callback {
 
   void start_up() final;
 
-  bool check_ip_address(const td::IPAddress &addr) const;
+  td::Status check_ip_address(const td::IPAddress &addr) const;
 
   void on_error(td::Status status);
   void on_connection_error(td::Status error) final;

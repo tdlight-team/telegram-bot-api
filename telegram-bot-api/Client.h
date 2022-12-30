@@ -22,13 +22,13 @@
 #include "td/utils/Container.h"
 #include "td/utils/FlatHashMap.h"
 #include "td/utils/FlatHashSet.h"
+#include "td/utils/HashTableUtils.h"
 #include "td/utils/JsonBuilder.h"
 #include "td/utils/Promise.h"
 #include "td/utils/Slice.h"
 #include "td/utils/Status.h"
 #include "td/utils/WaitFreeHashMap.h"
 
-#include <functional>
 #include <limits>
 #include <memory>
 #include <queue>
@@ -68,10 +68,12 @@ class Client final : public WebhookActor::Callback {
 
   static constexpr bool USE_MESSAGE_DATABASE = false;
 
+  static constexpr int64 GENERAL_MESSAGE_THREAD_ID = 1 << 20;
+
   static constexpr int32 MAX_CERTIFICATE_FILE_SIZE = 3 << 20;
   static constexpr int32 MAX_DOWNLOAD_FILE_SIZE = 20 << 20;
 
-  static constexpr int32 MAX_CONCURRENTLY_SENT_CHAT_MESSAGES = 1000;  // some unreasonably big value
+  static constexpr int32 MAX_CONCURRENTLY_SENT_CHAT_MESSAGES = 250;  // some unreasonably big value
 
   static constexpr std::size_t MIN_PENDING_UPDATES_WARNING = 200;
 
@@ -97,6 +99,7 @@ class Client final : public WebhookActor::Callback {
   static constexpr int USER_ONLY_ERROR_CODE = 405;
   static constexpr Slice USER_ONLY_ERROR_DESCRIPTION = "Method Not Allowed: You can only use this method as a user";
 
+  class JsonEmptyObject;
   class JsonFile;
   class JsonDatedFile;
   class JsonDatedFiles;
@@ -132,7 +135,6 @@ class Client final : public WebhookActor::Callback {
   class JsonPollAnswer;
   class JsonEntity;
   class JsonVectorEntities;
-  class JsonCallbackGame;
   class JsonWebAppInfo;
   class JsonInlineKeyboardButton;
   class JsonInlineKeyboard;
@@ -156,7 +158,7 @@ class Client final : public WebhookActor::Callback {
   class JsonChatMemberUpdated;
   class JsonChatJoinRequest;
   class JsonForumTopicCreated;
-  class JsonForumTopicIsClosedToggled;
+  class JsonForumTopicEdited;
   class JsonForumTopicInfo;
   class JsonGameHighScore;
   class JsonAddress;
@@ -168,10 +170,9 @@ class Client final : public WebhookActor::Callback {
   class JsonWebAppData;
   class JsonProximityAlertTriggered;
   class JsonVideoChatScheduled;
-  class JsonVideoChatStarted;
   class JsonVideoChatEnded;
   class JsonInviteVideoChatParticipants;
-  class JsonChatSetTtl;
+  class JsonChatSetMessageAutoDeleteTime;
   class JsonUpdateTypes;
   class JsonWebhookInfo;
   class JsonStickerSet;
@@ -184,6 +185,7 @@ class Client final : public WebhookActor::Callback {
   class JsonChats;
   class JsonChatsNearby;
   class JsonMessagesArray;
+  class JsonFoundMessages;
   class JsonProxy;
   class JsonProxiesArray;
   //stop custom Json objects
@@ -236,6 +238,7 @@ class Client final : public WebhookActor::Callback {
   class TdOnJoinChatCallback;
   class TdOnReturnChatCallback;
   class TdOnReturnMessagesCallback;
+  class TdOnFoundMessagesCallback;
   class TdOnGetCallbackQueryAnswerCallback;
   class TdOnGetProxiesQueryCallback;
   class TdOnAddProxyQueryCallback;
@@ -359,14 +362,9 @@ class Client final : public WebhookActor::Callback {
   void on_result(td::uint64 id, object_ptr<td_api::Object> result);
 
   void on_update_authorization_state();
-  void log_out(bool is_api_id_invalid);
-  Slice get_logging_out_error_description() const;
+  void log_out(int32 error_code, Slice error_message);
   void on_closed();
   void finish_closing();
-
-  static int32 get_database_scheduler_id();
-
-  static int32 get_file_gc_scheduler_id();
 
   void clear_tqueue();
 
@@ -519,6 +517,8 @@ class Client final : public WebhookActor::Callback {
 
   static td::Result<int64> get_user_id(const Query *query, Slice field_name = Slice("user_id"));
 
+  void decrease_yet_unsent_message_count(int64 chat_id, int32 count);
+
   int64 extract_yet_unsent_message_query_id(int64 chat_id, int64 message_id, bool *is_reply_to_message_deleted);
 
   // start custom helper methods
@@ -614,6 +614,11 @@ class Client final : public WebhookActor::Callback {
   Status process_reopen_forum_topic_query(PromisedQueryPtr &query);
   Status process_delete_forum_topic_query(PromisedQueryPtr &query);
   Status process_unpin_all_forum_topic_messages_query(PromisedQueryPtr &query);
+  Status process_edit_general_forum_topic_query(PromisedQueryPtr &query);
+  Status process_close_general_forum_topic_query(PromisedQueryPtr &query);
+  Status process_reopen_general_forum_topic_query(PromisedQueryPtr &query);
+  Status process_hide_general_forum_topic_query(PromisedQueryPtr &query);
+  Status process_unhide_general_forum_topic_query(PromisedQueryPtr &query);
   Status process_get_chat_member_query(PromisedQueryPtr &query);
   Status process_get_chat_administrators_query(PromisedQueryPtr &query);
   Status process_get_chat_member_count_query(PromisedQueryPtr &query);
@@ -719,9 +724,18 @@ class Client final : public WebhookActor::Callback {
 
   void abort_long_poll(bool from_set_webhook);
 
-  void fail_query_closing(PromisedQueryPtr &&query) const;
+  void fail_query_closing(PromisedQueryPtr &&query);
 
   void fail_query_conflict(Slice message, PromisedQueryPtr &&query);
+
+  struct ClosingError {
+    int code;
+    int retry_after;
+    Slice message;
+  };
+  ClosingError get_closing_error();
+
+  static int get_retry_after_time(Slice error_message);
 
   static void fail_query_with_error(PromisedQueryPtr query, int32 error_code, Slice error_message,
                                     Slice default_message = Slice());
@@ -817,6 +831,8 @@ class Client final : public WebhookActor::Callback {
     bool has_location = false;
     bool join_to_send_messages = false;
     bool join_by_request = false;
+    bool has_hidden_members = false;
+    bool has_aggressive_anti_spam_enabled = false;
 
     // start custom properties
     bool is_verified = false;
@@ -832,6 +848,8 @@ class Client final : public WebhookActor::Callback {
   void set_supergroup_slow_mode_delay(int64 supergroup_id, int32 slow_mode_delay);
   void set_supergroup_linked_chat_id(int64 supergroup_id, int64 linked_chat_id);
   void set_supergroup_location(int64 supergroup_id, object_ptr<td_api::chatLocation> location);
+  void set_supergroup_has_hidden_members(int64 supergroup_id, bool has_hidden_members);
+  void set_supergroup_has_aggressive_anti_spam_enabled(int64 supergroup_id, bool has_aggressive_anti_spam_enabled);
   SupergroupInfo *add_supergroup_info(int64 supergroup_id);
   const SupergroupInfo *get_supergroup_info(int64 supergroup_id) const;
 
@@ -942,7 +960,8 @@ class Client final : public WebhookActor::Callback {
   td::unique_ptr<MessageInfo> delete_message(int64 chat_id, int64 message_id, bool only_from_cache);
 
   void add_new_message(object_ptr<td_api::message> &&message, bool is_edited);
-  void process_new_message_queue(int64 chat_id);
+
+  void process_new_message_queue(int64 chat_id, int state);
 
   struct FullMessageId {
     int64 chat_id;
@@ -959,14 +978,14 @@ class Client final : public WebhookActor::Callback {
   };
 
   struct FullMessageIdHash {
-    std::size_t operator()(FullMessageId full_message_id) const {
-      return std::hash<td::int64>()(full_message_id.chat_id) * 2023654985u +
-             std::hash<td::int64>()(full_message_id.message_id);
+    td::uint32 operator()(FullMessageId full_message_id) const {
+      return td::Hash<td::int64>()(full_message_id.chat_id) * 2023654985u +
+             td::Hash<td::int64>()(full_message_id.message_id);
     }
   };
 
   FullMessageId add_message(object_ptr<td_api::message> &&message, bool force_update_content = false);
-  const MessageInfo *get_message(int64 chat_id, int64 message_id) const;
+  const MessageInfo *get_message(int64 chat_id, int64 message_id, bool force_cache) const;
   MessageInfo *get_message_editable(int64 chat_id, int64 message_id);
 
   void update_message_content(int64 chat_id, int64 message_id, object_ptr<td_api::MessageContent> &&content);
@@ -998,6 +1017,7 @@ class Client final : public WebhookActor::Callback {
                                     const td::string &inline_message_id);
 
   void add_new_callback_query(object_ptr<td_api::updateNewCallbackQuery> &&query);
+
   void process_new_callback_query_queue(int64 user_id, int state);
 
   void add_new_inline_callback_query(object_ptr<td_api::updateNewInlineCallbackQuery> &&query);
@@ -1085,6 +1105,10 @@ class Client final : public WebhookActor::Callback {
 
   int64 my_id_ = -1;
   int32 authorization_date_ = -1;
+  double next_authorization_time_ = 0;
+
+  int32 prev_retry_after = 0;
+  td::string retry_after_error_message;
 
   int64 group_anonymous_bot_user_id_ = 0;
   int64 channel_bot_user_id_ = 0;
@@ -1215,6 +1239,9 @@ class Client final : public WebhookActor::Callback {
   double previous_get_updates_start_time_ = 0;
   double previous_get_updates_finish_time_ = 0;
   double next_get_updates_conflict_time_ = 0;
+
+  int32 flood_limited_query_count_ = 0;
+  double next_flood_limit_warning_time_ = 0;
 
   td::uint64 webhook_generation_ = 1;
 

@@ -196,12 +196,25 @@ double BotStatActor::get_score(double now) {
   return result;
 }
 
+double BotStatActor::get_minute_update_count(double now) {
+  auto minute_stat = stat_[2].stat_duration(now);
+  double result = minute_stat.first.update_count_;
+  if (minute_stat.second != 0) {
+    result /= minute_stat.second;
+  }
+  return result;
+}
+
 td::int64 BotStatActor::get_active_request_count() const {
   return active_request_count_;
 }
 
 td::int64 BotStatActor::get_active_file_upload_bytes() const {
   return active_file_upload_bytes_;
+}
+
+td::int64 BotStatActor::get_active_file_upload_count() const {
+  return active_file_upload_count_;
 }
 
 bool BotStatActor::is_active(double now) const {

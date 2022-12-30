@@ -67,6 +67,7 @@ static void quit_signal_handler(int sig) {
 static td::MemoryLog<1 << 20> memory_log;
 
 void print_log() {
+  td::LogGuard log_guard;
   auto buf = memory_log.get_buffer();
   auto pos = memory_log.get_pos();
   size_t tail_length = buf.size() - pos;
@@ -85,19 +86,30 @@ void print_log() {
 
 static std::atomic_bool has_failed{false};
 
+static std::atomic_flag need_dump_statistics;
+
 static void dump_stacktrace_signal_handler(int sig) {
   if (has_failed) {
     return;
   }
+  td::LogGuard log_guard;
+  if (LOG_TAG != nullptr && *LOG_TAG) {
+    td::signal_safe_write(td::Slice(LOG_TAG));
+    td::signal_safe_write(td::Slice("\n"), false);
+  }
   td::Stacktrace::print_to_stderr();
+  need_dump_statistics.clear();
 }
 
 static void fail_signal_handler(int sig) {
   has_failed = true;
-  td::signal_safe_write_signal_number(sig);
-  td::Stacktrace::PrintOptions options;
-  options.use_gdb = true;
-  td::Stacktrace::print_to_stderr(options);
+  {
+    td::LogGuard log_guard;
+    td::signal_safe_write_signal_number(sig);
+    td::Stacktrace::PrintOptions options;
+    options.use_gdb = true;
+    td::Stacktrace::print_to_stderr(options);
+  }
   print_log();
   _Exit(EXIT_FAILURE);
 }
@@ -130,6 +142,7 @@ int main(int argc, char *argv[]) {
   need_reopen_log.test_and_set();
   need_quit.test_and_set();
   need_change_verbosity_level.test_and_set();
+  need_dump_statistics.test_and_set();
   need_dump_log.test_and_set();
 
   td::Stacktrace::init();
@@ -152,7 +165,7 @@ int main(int argc, char *argv[]) {
   auto start_time = td::Time::now();
   auto shared_data = std::make_shared<SharedData>();
   auto parameters = std::make_unique<ClientParameters>();
-  parameters->version_ = "6.3.2";
+  parameters->version_ = "6.4";
   parameters->shared_data_ = shared_data;
   parameters->start_time_ = start_time;
   auto net_query_stats = td::create_net_query_stats();
@@ -556,8 +569,7 @@ int main(int argc, char *argv[]) {
 
     if (!need_dump_log.test_and_set()) {
       print_log();
-      auto guard = sched.get_main_guard();
-      send_closure(client_manager, &ClientManager::dump_statistics);
+      need_dump_statistics.clear();
     }
 
     double now = td::Time::now();
@@ -575,7 +587,7 @@ int main(int argc, char *argv[]) {
       next_watchdog_kick_time = now + WATCHDOG_TIMEOUT / 2;
     }
 
-    if (now > last_dump_time + 300.0) {
+    if (!need_dump_statistics.test_and_set() || now > last_dump_time + 300.0) {
       last_dump_time = now;
       auto guard = sched.get_main_guard();
       send_closure(client_manager, &ClientManager::dump_statistics);

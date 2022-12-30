@@ -209,14 +209,14 @@ bool ClientManager::check_flood_limits(PromisedQueryPtr &query, bool is_user_log
         flood_control.add_limit(60 * 60, 600);  // 600 in an hour
       }
     }
-    auto now = static_cast<td::uint32>(td::Time::now());
-    td::uint32 wakeup_at = flood_control.get_wakeup_at();
+    auto now = td::Time::now();
+    auto wakeup_at = flood_control.get_wakeup_at();
     if (wakeup_at > now) {
       LOG(INFO) << "Failed to create Client from IP address " << ip_address;
       query->set_retry_after_error(static_cast<int>(wakeup_at - now) + 1);
       return false;
     }
-    flood_control.add_event(static_cast<td::int32>(now));
+    flood_control.add_event(now);
   }
   return true;
 }
@@ -344,13 +344,13 @@ void ClientManager::get_stats(td::Promise<td::BufferSlice> promise,
 
     if(as_json) {
       jb_root("buffer_memory", JsonStatsSize(td::BufferAllocator::get_buffer_mem()));
-      jb_root("active_webhook_connections", td::JsonLong(WebhookActor::get_total_connections_count()));
-      jb_root("active_requests", td::JsonLong(parameters_->shared_data_->query_count_.load()));
+      jb_root("active_webhook_connections", td::JsonLong(WebhookActor::get_total_connection_count()));
+      jb_root("active_requests", td::JsonLong(parameters_->shared_data_->query_count_.load(std::memory_order_relaxed)));
       jb_root("active_network_queries", td::JsonLong(td::get_pending_network_query_count(*parameters_->net_query_stats_)));
     } else {
       sb << "buffer_memory\t" << td::format::as_size(td::BufferAllocator::get_buffer_mem()) << '\n';
-      sb << "active_webhook_connections\t" << WebhookActor::get_total_connections_count() << '\n';
-      sb << "active_requests\t" << parameters_->shared_data_->query_count_.load() << '\n';
+      sb << "active_webhook_connections\t" << WebhookActor::get_total_connection_count() << '\n';
+      sb << "active_requests\t" << parameters_->shared_data_->query_count_.load(std::memory_order_relaxed) << '\n';
       sb << "active_network_queries\t" << td::get_pending_network_query_count(*parameters_->net_query_stats_) << '\n';
     }
     if(as_json) {
@@ -370,9 +370,10 @@ void ClientManager::get_stats(td::Promise<td::BufferSlice> promise,
       ServerBotInfo bot_info = client_info->client_.get_actor_unsafe()->get_bot_info();
       auto active_request_count = client_info->stat_.get_active_request_count();
       auto active_file_upload_bytes = client_info->stat_.get_active_file_upload_bytes();
+      auto active_file_upload_count = client_info->stat_.get_active_file_upload_count();
       auto stats = client_info->stat_.as_json_ready_vector(now);
       JsonStatsBotAdvanced bot(
-          std::move(top_bot_id), std::move(bot_info), active_request_count, active_file_upload_bytes, std::move(stats), parameters_->stats_hide_sensible_data_, now
+          std::move(top_bot_id), std::move(bot_info), active_request_count, active_file_upload_bytes, active_file_upload_count, std::move(stats), parameters_->stats_hide_sensible_data_, now
         );
       bots.push_back(bot);
     }
@@ -385,6 +386,7 @@ void ClientManager::get_stats(td::Promise<td::BufferSlice> promise,
       auto bot_info = client_info->client_.get_actor_unsafe()->get_bot_info();
       auto active_request_count = client_info->stat_.get_active_request_count();
       auto active_file_upload_bytes = client_info->stat_.get_active_file_upload_bytes();
+      auto active_file_upload_count = client_info->stat_.get_active_file_upload_count();
       sb << '\n';
       sb << "id\t" << bot_info.id_ << '\n';
       sb << "uptime\t" << now - bot_info.start_time_ << '\n';
@@ -397,6 +399,9 @@ void ClientManager::get_stats(td::Promise<td::BufferSlice> promise,
       }
       if (active_file_upload_bytes != 0) {
         sb << "active_file_upload_bytes\t" << active_file_upload_bytes << '\n';
+      }
+      if (active_file_upload_count != 0) {
+        sb << "active_file_upload_count\t" << active_file_upload_count << '\n';
       }
       if (!bot_info.webhook_.empty()) {
           if (!parameters_->stats_hide_sensible_data_) {

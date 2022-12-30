@@ -11,10 +11,7 @@
 #include "td/net/GetHostByNameActor.h"
 #include "td/net/HttpHeaderCreator.h"
 #include "td/net/HttpProxy.h"
-#include "td/net/SslStream.h"
 #include "td/net/TransparentProxy.h"
-
-#include "td/actor/actor.h"
 
 #include "td/utils/base64.h"
 #include "td/utils/buffer.h"
@@ -32,13 +29,11 @@
 #include "td/utils/Span.h"
 #include "td/utils/Time.h"
 
-#include <limits>
-
 namespace telegram_bot_api {
 
 static int VERBOSITY_NAME(webhook) = VERBOSITY_NAME(DEBUG);
 
-std::atomic<td::uint64> WebhookActor::total_connections_count_{0};
+std::atomic<td::uint64> WebhookActor::total_connection_count_{0};
 
 WebhookActor::WebhookActor(td::ActorShared<Callback> callback, td::int64 tqueue_id, td::HttpUrl url,
                            td::string cert_path, td::int32 max_connections, bool from_db_flag,
@@ -52,8 +47,10 @@ WebhookActor::WebhookActor(td::ActorShared<Callback> callback, td::int64 tqueue_
     , fix_ip_address_(fix_ip_address)
     , from_db_flag_(from_db_flag)
     , max_connections_(max_connections)
-    , secret_token_(std::move(secret_token)) {
+    , secret_token_(std::move(secret_token))
+    , slow_scheduler_id_(td::Scheduler::instance()->sched_count() - 2) {
   CHECK(max_connections_ > 0);
+  CHECK(slow_scheduler_id_ > 0);
 
   if (!cached_ip_address.empty()) {
     auto r_ip_address = td::IPAddress::get_ip_address(cached_ip_address);
@@ -72,6 +69,11 @@ WebhookActor::WebhookActor(td::ActorShared<Callback> callback, td::int64 tqueue_
             << "\", protocol = " << (url_.protocol_ == td::HttpUrl::Protocol::Http ? "http" : "https")
             << ", host = " << url_.host_ << ", port = " << url_.port_ << ", query = " << url_.query_
             << ", max_connections = " << max_connections_;
+}
+
+WebhookActor::~WebhookActor() {
+  td::Scheduler::instance()->destroy_on_scheduler(SharedData::get_file_gc_scheduler_id(), update_map_, queue_updates_,
+                                                  queues_);
 }
 
 void WebhookActor::relax_wakeup_at(double wakeup_at, const char *source) {
@@ -114,8 +116,9 @@ void WebhookActor::on_resolved_ip_address(td::Result<td::IPAddress> r_ip_address
     return on_error(r_ip_address.move_as_error());
   }
   auto new_ip_address = r_ip_address.move_as_ok();
-  if (!check_ip_address(new_ip_address)) {
-    return on_error(td::Status::Error(PSLICE() << "IP address " << new_ip_address.get_ip_str() << " is reserved"));
+  auto check_status = check_ip_address(new_ip_address);
+  if (check_status.is_error()) {
+    return on_error(std::move(check_status));
   }
   if (!(ip_address_ == new_ip_address)) {
     VLOG(webhook) << "IP address has changed: " << ip_address_ << " --> " << new_ip_address;
@@ -128,24 +131,25 @@ void WebhookActor::on_resolved_ip_address(td::Result<td::IPAddress> r_ip_address
   VLOG(webhook) << "IP address was verified";
 }
 
-td::Status WebhookActor::create_connection() {
-  if (!ip_address_.is_valid()) {
-    VLOG(webhook) << "Can't create connection: IP address is not ready";
-    return td::Status::Error("IP address is not ready");
+void WebhookActor::on_ssl_context_created(td::Result<td::SslCtx> r_ssl_ctx) {
+  if (r_ssl_ctx.is_error()) {
+    create_webhook_error("Can't create an SSL context", r_ssl_ctx.move_as_error(), true);
+    loop();
+    return;
   }
+  ssl_ctx_ = r_ssl_ctx.move_as_ok();
+  VLOG(webhook) << "SSL context was created";
+  loop();
+}
+
+td::Status WebhookActor::create_connection() {
+  CHECK(ip_address_.is_valid());
   if (parameters_->webhook_proxy_ip_address_.is_valid()) {
     auto r_proxy_socket_fd = td::SocketFd::open(parameters_->webhook_proxy_ip_address_);
     if (r_proxy_socket_fd.is_error()) {
-      td::Slice error_message = "Can't connect to the webhook proxy";
-      auto error = td::Status::Error(PSLICE() << error_message << ": " << r_proxy_socket_fd.error());
-      VLOG(webhook) << error;
-      on_webhook_error(error_message);
-      on_error(td::Status::Error(error_message));
-      return error;
+      return create_webhook_error("Can't connect to the webhook proxy", r_proxy_socket_fd.move_as_error(), false);
     }
     if (!was_checked_) {
-      TRY_STATUS(create_ssl_stream());  // check certificate
-
       // verify webhook even we can't establish connection to the webhook
       was_checked_ = true;
       on_webhook_verified();
@@ -188,14 +192,22 @@ td::Status WebhookActor::create_connection() {
 
   auto r_fd = td::SocketFd::open(ip_address_);
   if (r_fd.is_error()) {
-    td::Slice error_message = "Can't connect to the webhook";
-    auto error = td::Status::Error(PSLICE() << error_message << ": " << r_fd.error());
-    VLOG(webhook) << error;
-    on_webhook_error(error_message);
-    on_error(r_fd.move_as_error());
-    return error;
+    return create_webhook_error("Can't connect to the webhook", r_fd.move_as_error(), false);
   }
   return create_connection(td::BufferedFd<td::SocketFd>(r_fd.move_as_ok()));
+}
+
+td::Status WebhookActor::create_webhook_error(td::Slice error_message, td::Status &&result, bool is_public) {
+  CHECK(result.is_error());
+  auto error = td::Status::Error(PSLICE() << error_message << ": " << result);
+  VLOG(webhook) << error;
+  if (is_public) {
+    on_webhook_error(PSLICE() << error_message << ": " << result.public_message());
+  } else {
+    on_webhook_error(error_message);
+  }
+  on_error(std::move(result));
+  return std::move(error);
 }
 
 td::Result<td::SslStream> WebhookActor::create_ssl_stream() {
@@ -203,14 +215,10 @@ td::Result<td::SslStream> WebhookActor::create_ssl_stream() {
     return td::SslStream();
   }
 
-  auto r_ssl_stream = td::SslStream::create(url_.host_, cert_path_, td::SslStream::VerifyPeer::On, !cert_path_.empty());
+  CHECK(ssl_ctx_);
+  auto r_ssl_stream = td::SslStream::create(url_.host_, ssl_ctx_, !cert_path_.empty());
   if (r_ssl_stream.is_error()) {
-    td::Slice error_message = "Can't create an SSL connection";
-    auto error = td::Status::Error(PSLICE() << error_message << ": " << r_ssl_stream.error());
-    VLOG(webhook) << error;
-    on_webhook_error(PSLICE() << error_message << ": " << r_ssl_stream.error().public_message());
-    on_error(r_ssl_stream.move_as_error());
-    return std::move(error);
+    return create_webhook_error("Can't create an SSL connection", r_ssl_stream.move_as_error(), true);
   }
   return r_ssl_stream.move_as_ok();
 }
@@ -221,13 +229,13 @@ td::Status WebhookActor::create_connection(td::BufferedFd<td::SocketFd> fd) {
   auto id = connections_.create(Connection());
   auto *conn = connections_.get(id);
   conn->actor_id_ = td::create_actor<td::HttpOutboundConnection>(
-      PSLICE() << "Connect:" << id, std::move(fd), std::move(ssl_stream), std::numeric_limits<size_t>::max(), 20, 60,
-      td::ActorShared<td::HttpOutboundConnection::Callback>(actor_id(this), id));
+      PSLICE() << "Connect:" << id, std::move(fd), std::move(ssl_stream), 0, 20, 60,
+      td::ActorShared<td::HttpOutboundConnection::Callback>(actor_id(this), id), slow_scheduler_id_);
   conn->ip_generation_ = ip_generation_;
   conn->event_id_ = {};
   conn->id_ = id;
   ready_connections_.put(conn->to_list_node());
-  total_connections_count_.fetch_add(1, std::memory_order_relaxed);
+  total_connection_count_.fetch_add(1, std::memory_order_relaxed);
 
   if (!was_checked_) {
     was_checked_ = true;
@@ -251,6 +259,15 @@ void WebhookActor::on_socket_ready_async(td::Result<td::BufferedFd<td::SocketFd>
 }
 
 void WebhookActor::create_new_connections() {
+  if (!ip_address_.is_valid()) {
+    VLOG(webhook) << "Can't create new connections: IP address is not ready";
+    return;
+  }
+  if (url_.protocol_ != td::HttpUrl::Protocol::Http && !ssl_ctx_) {
+    VLOG(webhook) << "Can't create new connections: SSL context is not ready";
+    return;
+  }
+
   size_t need_connections = queue_updates_.size();
   if (need_connections > static_cast<size_t>(max_connections_)) {
     need_connections = max_connections_;
@@ -287,7 +304,7 @@ void WebhookActor::create_new_connections() {
                     << td::tag("after", td::format::as_time(wakeup_at - now));
       break;
     }
-    flood->add_event(static_cast<td::int32>(now));
+    flood->add_event(now);
     if (create_connection().is_error()) {
       relax_wakeup_at(now + 1.0, "create_new_connections error");
       return;
@@ -652,7 +669,7 @@ void WebhookActor::handle(td::unique_ptr<td::HttpQuery> response) {
   if (need_close || close_connection) {
     VLOG(webhook) << "Close connection " << connection_id;
     connections_.erase(connection_ptr->id_);
-    total_connections_count_.fetch_sub(1, std::memory_order_relaxed);
+    total_connection_count_.fetch_sub(1, std::memory_order_relaxed);
   } else {
     ready_connections_.put(connection_ptr->to_list_node());
   }
@@ -668,10 +685,10 @@ void WebhookActor::start_up() {
   max_loaded_updates_ = max_connections_ * 2;
 
   next_ip_address_resolve_time_ = last_success_time_ = td::Time::now() - 3600;
-  active_new_connection_flood_.add_limit(1, 10 * max_connections_);
-  active_new_connection_flood_.add_limit(5, 20 * max_connections_);
 
-  pending_new_connection_flood_.add_limit(1, 1);
+  active_new_connection_flood_.add_limit(1, 20);
+
+  pending_new_connection_flood_.add_limit(2, 1);
 
   if (!parameters_->local_mode_) {
     if (url_.protocol_ == td::HttpUrl::Protocol::Https || (parameters_->allow_http_ && url_.protocol_ == td::HttpUrl::Protocol::Http)) {
@@ -682,21 +699,29 @@ void WebhookActor::start_up() {
     } else {
       CHECK(url_.protocol_ == td::HttpUrl::Protocol::Http);
       VLOG(webhook) << "Can't create connection: HTTP is forbidden";
-      on_error(td::Status::Error("HTTPS url must be provided for webhook"));
+      on_error(td::Status::Error("An HTTPS URL must be provided for webhook"));
     }
   }
 
   if (fix_ip_address_ && !stop_flag_) {
-    if (!ip_address_.is_valid()) {
-      on_error(td::Status::Error("Invalid IP address specified"));
-    } else if (!check_ip_address(ip_address_)) {
-      on_error(td::Status::Error(PSLICE() << "IP address " << ip_address_.get_ip_str() << " is reserved"));
+    auto check_status = check_ip_address(ip_address_);
+    if (check_status.is_error()) {
+      return on_error(std::move(check_status));
     }
   }
 
   if (from_db_flag_ && !stop_flag_) {
     was_checked_ = true;
     on_webhook_verified();
+  }
+
+  if (url_.protocol_ != td::HttpUrl::Protocol::Http && !stop_flag_) {
+    // asynchronously create SSL context
+    td::Scheduler::instance()->run_on_scheduler(
+        SharedData::get_database_scheduler_id(), [actor_id = actor_id(this), cert_path = cert_path_](td::Unit) mutable {
+          send_closure(actor_id, &WebhookActor::on_ssl_context_created,
+                       td::SslCtx::create(cert_path, td::SslCtx::VerifyPeer::On));
+        });
   }
 
   yield();
@@ -720,7 +745,7 @@ void WebhookActor::close() {
 }
 
 void WebhookActor::tear_down() {
-  total_connections_count_.fetch_sub(connections_.size(), std::memory_order_relaxed);
+  total_connection_count_.fetch_sub(connections_.size(), std::memory_order_relaxed);
 }
 
 void WebhookActor::on_webhook_verified() {
@@ -731,24 +756,26 @@ void WebhookActor::on_webhook_verified() {
   send_closure(callback_, &Callback::webhook_verified, std::move(ip_address_str));
 }
 
-bool WebhookActor::check_ip_address(const td::IPAddress &addr) const {
+td::Status WebhookActor::check_ip_address(const td::IPAddress &addr) const {
   if (!addr.is_valid()) {
-    return false;
+    return td::Status::Error("Invalid IP address specified");
   }
   if (parameters_->local_mode_) {
-    // allow any valid IP address
-    return true;
+    return td::Status::OK();
   }
   if (!addr.is_ipv4()) {
     VLOG(webhook) << "Bad IP address (not IPv4): " << addr;
-    return false;
+    return td::Status::Error("IPv6-only addresses are not allowed");
   }
-  return !addr.is_reserved();
+  if (addr.is_reserved()) {
+    return td::Status::Error(PSLICE() << "IP address " << addr.get_ip_str() << " is reserved");
+  }
+  return td::Status::OK();
 }
 
 void WebhookActor::on_error(td::Status status) {
   VLOG(webhook) << "Receive webhook error " << status;
-  if (!was_checked_) {
+  if (!was_checked_ && !stop_flag_) {
     CHECK(!callback_.empty());
     send_closure(std::move(callback_), &Callback::webhook_closed, std::move(status));
     stop_flag_ = true;
