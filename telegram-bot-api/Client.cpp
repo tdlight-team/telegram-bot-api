@@ -1,5 +1,5 @@
 //
-// Copyright Aliaksei Levin (levlam@telegram.org), Arseny Smirnov (arseny30@gmail.com) 2014-2021
+// Copyright Aliaksei Levin (levlam@telegram.org), Arseny Smirnov (arseny30@gmail.com) 2014-2023
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -819,10 +819,12 @@ class Client::JsonChat final : public Jsonable {
           }
           object("permissions", JsonChatPermissions(permissions));
         }
-        auto everyone_is_administrator = permissions->can_send_messages_ && permissions->can_send_media_messages_ &&
-                                         permissions->can_send_polls_ && permissions->can_send_other_messages_ &&
-                                         permissions->can_add_web_page_previews_ && permissions->can_change_info_ &&
-                                         permissions->can_invite_users_ && permissions->can_pin_messages_;
+        auto everyone_is_administrator =
+            permissions->can_send_messages_ && permissions->can_send_audios_ && permissions->can_send_documents_ &&
+            permissions->can_send_photos_ && permissions->can_send_videos_ && permissions->can_send_video_notes_ &&
+            permissions->can_send_voice_notes_ && permissions->can_send_polls_ &&
+            permissions->can_send_other_messages_ && permissions->can_add_web_page_previews_ &&
+            permissions->can_change_info_ && permissions->can_invite_users_ && permissions->can_pin_messages_;
         object("all_members_are_administrators", td::JsonBool(everyone_is_administrator));
         photo = group_info->photo.get();
         break;
@@ -1825,6 +1827,34 @@ class Client::JsonChatSetMessageAutoDeleteTime final : public Jsonable {
   const td_api::messageChatSetMessageAutoDeleteTime *chat_set_message_auto_delete_time_;
 };
 
+class Client::JsonUserShared final : public Jsonable {
+ public:
+  explicit JsonUserShared(const td_api::messageUserShared *user_shared) : user_shared_(user_shared) {
+  }
+  void store(JsonValueScope *scope) const {
+    auto object = scope->enter_object();
+    object("user_id", user_shared_->user_id_);
+    object("request_id", user_shared_->button_id_);
+  }
+
+ private:
+  const td_api::messageUserShared *user_shared_;
+};
+
+class Client::JsonChatShared final : public Jsonable {
+ public:
+  explicit JsonChatShared(const td_api::messageChatShared *chat_shared) : chat_shared_(chat_shared) {
+  }
+  void store(JsonValueScope *scope) const {
+    auto object = scope->enter_object();
+    object("chat_id", chat_shared_->chat_id_);
+    object("request_id", chat_shared_->button_id_);
+  }
+
+ private:
+  const td_api::messageChatShared *chat_shared_;
+};
+
 class Client::JsonWebAppInfo final : public Jsonable {
  public:
   explicit JsonWebAppInfo(const td::string &url) : url_(url) {
@@ -2315,6 +2345,16 @@ void Client::JsonMessage::store(JsonValueScope *scope) const {
     case td_api::messageBotWriteAccessAllowed::ID:
       object("write_access_allowed", JsonEmptyObject());
       break;
+    case td_api::messageUserShared::ID: {
+      auto content = static_cast<const td_api::messageUserShared *>(message_->content.get());
+      object("user_shared", JsonUserShared(content));
+      break;
+    }
+    case td_api::messageChatShared::ID: {
+      auto content = static_cast<const td_api::messageChatShared *>(message_->content.get());
+      object("chat_shared", JsonChatShared(content));
+      break;
+    }
     default:
       UNREACHABLE();
   }
@@ -2825,6 +2865,7 @@ class Client::JsonChatJoinRequest final : public Jsonable {
     auto object = scope->enter_object();
     object("chat", JsonChat(update_->chat_id_, false, client_));
     object("from", JsonUser(update_->request_->user_id_, client_));
+    object("user_chat_id", update_->user_chat_id_);
     object("date", update_->request_->date_);
     if (!update_->request_->bio_.empty()) {
       object("bio", update_->request_->bio_);
@@ -4718,7 +4759,11 @@ ServerBotInfo Client::get_bot_info() const {
   if (user_info != nullptr) {
     res.username_ = user_info->editable_username;
   } else if (!was_authorized_) {
-    res.username_ = "<unauthorized>";
+    if (logging_out_) {
+      res.username_ = "<failed to authorize>";
+    } else {
+      res.username_ = "<unauthorized>";
+    }
   } else {
     res.username_ = "<unknown>";
   }
@@ -6000,7 +6045,8 @@ void Client::timeout_expired() {
 void Client::clear_tqueue() {
   CHECK(webhook_id_.empty());
   auto &tqueue = parameters_->shared_data_->tqueue_;
-  tqueue->clear(tqueue_id_, 0);
+  auto deleted_events = tqueue->clear(tqueue_id_, 0);
+  td::Scheduler::instance()->destroy_on_scheduler(SharedData::get_file_gc_scheduler_id(), deleted_events);
 }
 
 bool Client::to_bool(td::MutableSlice value) {
@@ -6048,6 +6094,47 @@ td::Result<td_api::object_ptr<td_api::keyboardButton>> Client::get_keyboard_butt
       auto &web_app_object = web_app.get_object();
       TRY_RESULT(url, get_json_object_string_field(web_app_object, "url", false));
       return make_object<td_api::keyboardButton>(text, make_object<td_api::keyboardButtonTypeWebApp>(url));
+    }
+
+    if (has_json_object_field(object, "request_user")) {
+      TRY_RESULT(request_user, get_json_object_field(object, "request_user", JsonValue::Type::Object, false));
+      auto &request_user_object = request_user.get_object();
+      TRY_RESULT(id, get_json_object_int_field(request_user_object, "request_id", false));
+      auto restrict_user_is_bot = has_json_object_field(request_user_object, "user_is_bot");
+      TRY_RESULT(user_is_bot, get_json_object_bool_field(request_user_object, "user_is_bot"));
+      auto restrict_user_is_premium = has_json_object_field(request_user_object, "user_is_premium");
+      TRY_RESULT(user_is_premium, get_json_object_bool_field(request_user_object, "user_is_premium"));
+      return make_object<td_api::keyboardButton>(
+          text, make_object<td_api::keyboardButtonTypeRequestUser>(id, restrict_user_is_bot, user_is_bot,
+                                                                   restrict_user_is_premium, user_is_premium));
+    }
+
+    if (has_json_object_field(object, "request_chat")) {
+      TRY_RESULT(request_chat, get_json_object_field(object, "request_chat", JsonValue::Type::Object, false));
+      auto &request_chat_object = request_chat.get_object();
+      TRY_RESULT(id, get_json_object_int_field(request_chat_object, "request_id", false));
+      TRY_RESULT(chat_is_channel, get_json_object_bool_field(request_chat_object, "chat_is_channel"));
+      auto restrict_chat_is_forum = has_json_object_field(request_chat_object, "chat_is_forum");
+      TRY_RESULT(chat_is_forum, get_json_object_bool_field(request_chat_object, "chat_is_forum"));
+      auto restrict_chat_has_username = has_json_object_field(request_chat_object, "chat_has_username");
+      TRY_RESULT(chat_has_username, get_json_object_bool_field(request_chat_object, "chat_has_username"));
+      TRY_RESULT(chat_is_created, get_json_object_bool_field(request_chat_object, "chat_is_created"));
+      td_api::object_ptr<td_api::chatAdministratorRights> user_administrator_rights;
+      if (has_json_object_field(request_chat_object, "user_administrator_rights")) {
+        TRY_RESULT_ASSIGN(user_administrator_rights, get_chat_administrator_rights(get_json_object_field_force(
+                                                         request_chat_object, "user_administrator_rights")));
+      }
+      td_api::object_ptr<td_api::chatAdministratorRights> bot_administrator_rights;
+      if (has_json_object_field(request_chat_object, "bot_administrator_rights")) {
+        TRY_RESULT_ASSIGN(bot_administrator_rights, get_chat_administrator_rights(get_json_object_field_force(
+                                                        request_chat_object, "bot_administrator_rights")));
+      }
+      TRY_RESULT(bot_is_member, get_json_object_bool_field(request_chat_object, "bot_is_member"));
+      return make_object<td_api::keyboardButton>(
+          text, make_object<td_api::keyboardButtonTypeRequestChat>(
+                    id, chat_is_channel, restrict_chat_is_forum, chat_is_forum, restrict_chat_has_username,
+                    chat_has_username, chat_is_created, std::move(user_administrator_rights),
+                    std::move(bot_administrator_rights), bot_is_member));
     }
 
     return make_object<td_api::keyboardButton>(text, nullptr);
@@ -7551,10 +7638,15 @@ td::Result<td_api::object_ptr<td_api::location>> Client::get_location(const Quer
                                        td::to_double(horizontal_accuracy));
 }
 
-td::Result<td_api::object_ptr<td_api::chatPermissions>> Client::get_chat_permissions(const Query *query,
-                                                                                     bool &allow_legacy) {
+td::Result<td_api::object_ptr<td_api::chatPermissions>> Client::get_chat_permissions(
+    const Query *query, bool &allow_legacy, bool use_independent_chat_permissions) {
   auto can_send_messages = false;
-  auto can_send_media_messages = false;
+  auto can_send_audios = false;
+  auto can_send_documents = false;
+  auto can_send_photos = false;
+  auto can_send_videos = false;
+  auto can_send_video_notes = false;
+  auto can_send_voice_notes = false;
   auto can_send_polls = false;
   auto can_send_other_messages = false;
   auto can_add_web_page_previews = false;
@@ -7580,7 +7672,6 @@ td::Result<td_api::object_ptr<td_api::chatPermissions>> Client::get_chat_permiss
 
     auto status = [&] {
       TRY_RESULT_ASSIGN(can_send_messages, get_json_object_bool_field(object, "can_send_messages"));
-      TRY_RESULT_ASSIGN(can_send_media_messages, get_json_object_bool_field(object, "can_send_media_messages"));
       TRY_RESULT_ASSIGN(can_send_polls, get_json_object_bool_field(object, "can_send_polls"));
       TRY_RESULT_ASSIGN(can_send_other_messages, get_json_object_bool_field(object, "can_send_other_messages"));
       TRY_RESULT_ASSIGN(can_add_web_page_previews, get_json_object_bool_field(object, "can_add_web_page_previews"));
@@ -7592,19 +7683,60 @@ td::Result<td_api::object_ptr<td_api::chatPermissions>> Client::get_chat_permiss
       } else {
         can_manage_topics = can_pin_messages;
       }
+      if (has_json_object_field(object, "can_send_audios") || has_json_object_field(object, "can_send_documents") ||
+          has_json_object_field(object, "can_send_photos") || has_json_object_field(object, "can_send_videos") ||
+          has_json_object_field(object, "can_send_video_notes") ||
+          has_json_object_field(object, "can_send_voice_notes")) {
+        TRY_RESULT_ASSIGN(can_send_audios, get_json_object_bool_field(object, "can_send_audios"));
+        TRY_RESULT_ASSIGN(can_send_documents, get_json_object_bool_field(object, "can_send_documents"));
+        TRY_RESULT_ASSIGN(can_send_photos, get_json_object_bool_field(object, "can_send_photos"));
+        TRY_RESULT_ASSIGN(can_send_videos, get_json_object_bool_field(object, "can_send_videos"));
+        TRY_RESULT_ASSIGN(can_send_video_notes, get_json_object_bool_field(object, "can_send_video_notes"));
+        TRY_RESULT_ASSIGN(can_send_voice_notes, get_json_object_bool_field(object, "can_send_voice_notes"));
+      } else {
+        TRY_RESULT(can_send_media_messages, get_json_object_bool_field(object, "can_send_media_messages"));
+        can_send_audios = can_send_media_messages;
+        can_send_documents = can_send_media_messages;
+        can_send_photos = can_send_media_messages;
+        can_send_videos = can_send_media_messages;
+        can_send_video_notes = can_send_media_messages;
+        can_send_voice_notes = can_send_media_messages;
+        if (can_send_media_messages && !use_independent_chat_permissions) {
+          can_send_messages = true;
+        }
+      }
       return Status::OK();
     }();
 
     if (status.is_error()) {
       return Status::Error(400, PSLICE() << "Can't parse chat permissions: " << status.message());
     }
+
+    if ((can_send_other_messages || can_add_web_page_previews) && !use_independent_chat_permissions) {
+      can_send_audios = true;
+      can_send_documents = true;
+      can_send_photos = true;
+      can_send_videos = true;
+      can_send_video_notes = true;
+      can_send_voice_notes = true;
+      can_send_messages = true;
+    }
+    if (can_send_polls && !use_independent_chat_permissions) {
+      can_send_messages = true;
+    }
   } else if (allow_legacy) {
     allow_legacy = false;
 
     can_send_messages = to_bool(query->arg("can_send_messages"));
-    can_send_media_messages = to_bool(query->arg("can_send_media_messages"));
+    bool can_send_media_messages = to_bool(query->arg("can_send_media_messages"));
     can_send_other_messages = to_bool(query->arg("can_send_other_messages"));
     can_add_web_page_previews = to_bool(query->arg("can_add_web_page_previews"));
+    if ((can_send_other_messages || can_add_web_page_previews) && !use_independent_chat_permissions) {
+      can_send_media_messages = true;
+    }
+    if (can_send_media_messages && !use_independent_chat_permissions) {
+      can_send_messages = true;
+    }
 
     if (can_send_messages && can_send_media_messages && can_send_other_messages && can_add_web_page_previews) {
       // legacy unrestrict
@@ -7617,14 +7749,19 @@ td::Result<td_api::object_ptr<td_api::chatPermissions>> Client::get_chat_permiss
                query->has_arg("can_send_other_messages") || query->has_arg("can_add_web_page_previews")) {
       allow_legacy = true;
     }
+
+    can_send_audios = can_send_media_messages;
+    can_send_documents = can_send_media_messages;
+    can_send_photos = can_send_media_messages;
+    can_send_videos = can_send_media_messages;
+    can_send_video_notes = can_send_media_messages;
+    can_send_voice_notes = can_send_media_messages;
   }
 
-  if (can_send_other_messages || can_add_web_page_previews) {
-    can_send_media_messages = true;
-  }
-  return make_object<td_api::chatPermissions>(can_send_messages, can_send_media_messages, can_send_polls,
-                                              can_send_other_messages, can_add_web_page_previews, can_change_info,
-                                              can_invite_users, can_pin_messages, can_manage_topics);
+  return make_object<td_api::chatPermissions>(can_send_messages, can_send_audios, can_send_documents, can_send_photos,
+                                              can_send_videos, can_send_video_notes, can_send_voice_notes,
+                                              can_send_polls, can_send_other_messages, can_add_web_page_previews,
+                                              can_change_info, can_invite_users, can_pin_messages, can_manage_topics);
 }
 
 td::Result<td_api::object_ptr<td_api::InputMessageContent>> Client::get_input_media(const Query *query,
@@ -9123,7 +9260,8 @@ td::Status Client::process_set_chat_title_query(PromisedQueryPtr &query) {
 td::Status Client::process_set_chat_permissions_query(PromisedQueryPtr &query) {
   auto chat_id = query->arg("chat_id");
   bool allow_legacy = false;
-  TRY_RESULT(permissions, get_chat_permissions(query.get(), allow_legacy));
+  auto use_independent_chat_permissions = to_bool(query->arg("use_independent_chat_permissions"));
+  TRY_RESULT(permissions, get_chat_permissions(query.get(), allow_legacy, use_independent_chat_permissions));
   CHECK(!allow_legacy);
 
   check_chat(chat_id, AccessRights::Write, std::move(query),
@@ -9575,7 +9713,8 @@ td::Status Client::process_restrict_chat_member_query(PromisedQueryPtr &query) {
   TRY_RESULT(user_id, get_user_id(query.get()));
   int32 until_date = get_integer_arg(query.get(), "until_date", 0);
   bool allow_legacy = true;
-  TRY_RESULT(permissions, get_chat_permissions(query.get(), allow_legacy));
+  auto use_independent_chat_permissions = to_bool(query->arg("use_independent_chat_permissions"));
+  TRY_RESULT(permissions, get_chat_permissions(query.get(), allow_legacy, use_independent_chat_permissions));
 
   check_chat(chat_id, AccessRights::Write, std::move(query),
              [this, user_id, until_date, is_legacy = allow_legacy, permissions = std::move(permissions)](
@@ -10303,10 +10442,10 @@ td::Status Client::process_create_chat_query(PromisedQueryPtr &query) {
   auto description = query->arg("description");
   auto message_auto_delete_time = get_integer_arg(query.get(), "message_auto_delete_time", 0);
   if (chat_type == "supergroup") {
-    send_request(make_object<td_api::createNewSupergroupChat>(title.str(), false, description.str(), nullptr, message_auto_delete_time, false),
+    send_request(make_object<td_api::createNewSupergroupChat>(title.str(), false, false, description.str(), nullptr, message_auto_delete_time, false),
                  td::make_unique<TdOnReturnChatCallback>(this, std::move(query)));
   } else if (chat_type == "channel") {
-    send_request(make_object<td_api::createNewSupergroupChat>(title.str(), true, description.str(), nullptr, message_auto_delete_time, false),
+    send_request(make_object<td_api::createNewSupergroupChat>(title.str(), false, true, description.str(), nullptr, message_auto_delete_time, false),
                  td::make_unique<TdOnReturnChatCallback>(this, std::move(query)));
   } else if (chat_type == "group") {
     TRY_RESULT(initial_members, get_int_array_arg<td::int64>(query.get(), "user_ids"))
@@ -10920,7 +11059,8 @@ void Client::do_get_updates(int32 offset, int32 limit, int32 timeout, PromisedQu
   LOG(DEBUG) << "Queue head = " << tqueue->get_head(tqueue_id_) << ", queue tail = " << tqueue->get_tail(tqueue_id_);
 
   if (offset < 0) {
-    tqueue->clear(tqueue_id_, -offset);
+    auto deleted_events = tqueue->clear(tqueue_id_, -offset);
+    td::Scheduler::instance()->destroy_on_scheduler(SharedData::get_file_gc_scheduler_id(), deleted_events);
   }
   if (offset <= 0) {
     offset = tqueue->get_head(tqueue_id_).value();
@@ -11375,8 +11515,17 @@ void Client::json_store_administrator_rights(td::JsonObjectScope &object, const 
 }
 
 void Client::json_store_permissions(td::JsonObjectScope &object, const td_api::chatPermissions *permissions) {
+  bool can_send_media_messages = permissions->can_send_audios_ || permissions->can_send_documents_ ||
+                                 permissions->can_send_photos_ || permissions->can_send_videos_ ||
+                                 permissions->can_send_video_notes_ || permissions->can_send_voice_notes_;
   object("can_send_messages", td::JsonBool(permissions->can_send_messages_));
-  object("can_send_media_messages", td::JsonBool(permissions->can_send_media_messages_));
+  object("can_send_media_messages", td::JsonBool(can_send_media_messages));
+  object("can_send_audios", td::JsonBool(permissions->can_send_audios_));
+  object("can_send_documents", td::JsonBool(permissions->can_send_documents_));
+  object("can_send_photos", td::JsonBool(permissions->can_send_photos_));
+  object("can_send_videos", td::JsonBool(permissions->can_send_videos_));
+  object("can_send_video_notes", td::JsonBool(permissions->can_send_video_notes_));
+  object("can_send_voice_notes", td::JsonBool(permissions->can_send_voice_notes_));
   object("can_send_polls", td::JsonBool(permissions->can_send_polls_));
   object("can_send_other_messages", td::JsonBool(permissions->can_send_other_messages_));
   object("can_add_web_page_previews", td::JsonBool(permissions->can_add_web_page_previews_));

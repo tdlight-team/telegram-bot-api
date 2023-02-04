@@ -1,5 +1,5 @@
 //
-// Copyright Aliaksei Levin (levlam@telegram.org), Arseny Smirnov (arseny30@gmail.com) 2014-2021
+// Copyright Aliaksei Levin (levlam@telegram.org), Arseny Smirnov (arseny30@gmail.com) 2014-2023
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -165,7 +165,7 @@ int main(int argc, char *argv[]) {
   auto start_time = td::Time::now();
   auto shared_data = std::make_shared<SharedData>();
   auto parameters = std::make_unique<ClientParameters>();
-  parameters->version_ = "6.4.1";
+  parameters->version_ = "6.5";
   parameters->shared_data_ = shared_data;
   parameters->start_time_ = start_time;
   auto net_query_stats = td::create_net_query_stats();
@@ -304,7 +304,7 @@ int main(int argc, char *argv[]) {
   options.add_checked_option('\0', "file-expiration-time",
                              PSLICE() << "downloaded files expire after this amount of seconds of not being used (defaults to " << parameters->file_expiration_timeout_seconds_ << ")",
                              td::OptionParser::parse_integer(parameters->file_expiration_timeout_seconds_));
-                             
+
   options.add_checked_option('\0', "proxy",
                              "HTTP proxy server for outgoing webhook requests in the format http://host:port",
                              [&](td::Slice address) {
@@ -474,7 +474,7 @@ int main(int argc, char *argv[]) {
 
   // LOG(WARNING) << "Bot API server with commit " << td::GitInfo::commit() << ' '
   //              << (td::GitInfo::is_dirty() ? "(dirty)" : "") << " started";
-  LOG(WARNING) << "Bot API " << parameters->version_ << " server started";
+  LOG(WARNING) << "TDLight Bot API " << parameters->version_ << " server started";
 
   // +3 threads for Td
   // one thread for ClientManager and all Clients
@@ -514,7 +514,7 @@ int main(int argc, char *argv[]) {
         .release();
   }
 
-  constexpr double WATCHDOG_TIMEOUT = 0.5;
+  constexpr double WATCHDOG_TIMEOUT = 0.25;
   auto watchdog_id =
       sched.create_actor_unsafe<Watchdog>(thread_count - 2, "Watchdog", td::this_thread::get_id(), WATCHDOG_TIMEOUT);
 

@@ -1,5 +1,5 @@
 //
-// Copyright Aliaksei Levin (levlam@telegram.org), Arseny Smirnov (arseny30@gmail.com) 2014-2021
+// Copyright Aliaksei Levin (levlam@telegram.org), Arseny Smirnov (arseny30@gmail.com) 2014-2023
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -173,6 +173,8 @@ class Client final : public WebhookActor::Callback {
   class JsonVideoChatEnded;
   class JsonInviteVideoChatParticipants;
   class JsonChatSetMessageAutoDeleteTime;
+  class JsonUserShared;
+  class JsonChatShared;
   class JsonUpdateTypes;
   class JsonWebhookInfo;
   class JsonStickerSet;
@@ -484,7 +486,8 @@ class Client final : public WebhookActor::Callback {
 
   static td::Result<object_ptr<td_api::location>> get_location(const Query *query);
 
-  static td::Result<object_ptr<td_api::chatPermissions>> get_chat_permissions(const Query *query, bool &allow_legacy);
+  static td::Result<object_ptr<td_api::chatPermissions>> get_chat_permissions(const Query *query, bool &allow_legacy,
+                                                                              bool use_independent_chat_permissions);
 
   td::Result<object_ptr<td_api::InputMessageContent>> get_input_media(const Query *query, td::JsonValue &&input_media,
                                                                       bool for_album) const;

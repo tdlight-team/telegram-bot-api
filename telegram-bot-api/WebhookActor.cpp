@@ -1,5 +1,5 @@
 //
-// Copyright Aliaksei Levin (levlam@telegram.org), Arseny Smirnov (arseny30@gmail.com) 2014-2021
+// Copyright Aliaksei Levin (levlam@telegram.org), Arseny Smirnov (arseny30@gmail.com) 2014-2023
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -504,7 +504,8 @@ void WebhookActor::on_update_error(td::TQueue::EventId event_id, td::Slice error
   int next_delay = update.delay_;
   int next_effective_delay = retry_after;
   if (retry_after == 0 && update.fail_count_ > 0) {
-    next_delay = td::min(WEBHOOK_MAX_RESEND_TIMEOUT, next_delay * 2);
+    auto max_timeout = td::Random::fast(WEBHOOK_MAX_RESEND_TIMEOUT, WEBHOOK_MAX_RESEND_TIMEOUT * 2);
+    next_delay = td::min(max_timeout, next_delay * 2);
     next_effective_delay = next_delay;
   }
   if (parameters_->shared_data_->get_unix_time(now) + next_effective_delay > update.expires_at_) {
@@ -589,6 +590,11 @@ void WebhookActor::send_updates() {
 }
 
 void WebhookActor::handle(td::unique_ptr<td::HttpQuery> response) {
+  SCOPE_EXIT {
+    bool dummy = false;
+    td::Scheduler::instance()->destroy_on_scheduler(SharedData::get_file_gc_scheduler_id(), response, dummy);
+  };
+
   auto connection_id = get_link_token();
   if (response) {
     VLOG(webhook) << "Got response from connection " << connection_id;
@@ -686,7 +692,7 @@ void WebhookActor::start_up() {
 
   next_ip_address_resolve_time_ = last_success_time_ = td::Time::now() - 3600;
 
-  active_new_connection_flood_.add_limit(1, 20);
+  active_new_connection_flood_.add_limit(0.5, 10);
 
   pending_new_connection_flood_.add_limit(2, 1);
 

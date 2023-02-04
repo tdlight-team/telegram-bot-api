@@ -123,16 +123,15 @@ class JsonStatsCpu : public td::Jsonable {
 
 class JsonStatsBot : public td::Jsonable {
  public:
-  explicit JsonStatsBot(std::pair<td::int64, td::uint64> score_id_pair) : score_id_pair_(std::move(score_id_pair)) {
+  explicit JsonStatsBot(td::uint64 client_id) : client_id_(client_id) {
   }
   void store(td::JsonValueScope *scope) const {
     auto object = scope->enter_object();
-    object("score", td::JsonLong(score_id_pair_.first));
-    object("internal_id", td::JsonLong(score_id_pair_.second));
+    object("client_id", td::JsonLong(client_id_));
   }
 
  protected:
-  const std::pair<td::int64, td::uint64> score_id_pair_;
+  const td::uint64 client_id_;
 };
 
 class JsonStatsBotStatDouble : public td::Jsonable {
@@ -198,7 +197,7 @@ class JsonStatsBotStats : public td::Jsonable {
 
 class JsonStatsBotAdvanced : public JsonStatsBot {
  public:
-  explicit JsonStatsBotAdvanced(std::pair<td::int64, td::uint64> score_id_pair,
+  explicit JsonStatsBotAdvanced(td::uint64 client_id,
                                 ServerBotInfo bot,
                                 td::int64 active_request_count,
                                 td::int64 active_file_upload_bytes,
@@ -206,7 +205,7 @@ class JsonStatsBotAdvanced : public JsonStatsBot {
                                 td::vector<ServerBotStat> stats,
                                 const bool hide_sensible_data,
                                 const double now)
-      : JsonStatsBot(std::move(score_id_pair)), bot_(std::move(bot)), active_request_count_(active_request_count),
+      : JsonStatsBot(client_id), bot_(std::move(bot)), active_request_count_(active_request_count),
         active_file_upload_bytes_(active_file_upload_bytes), active_file_upload_count_(active_file_upload_count),
         stats_(std::move(stats)), hide_sensible_data_(hide_sensible_data), now_(now) {
   }
@@ -214,8 +213,7 @@ class JsonStatsBotAdvanced : public JsonStatsBot {
     auto object = scope->enter_object();
     object("id", td::JsonLong(td::to_integer<td::int64>(bot_.id_)));
     object("uptime", now_ - bot_.start_time_);
-    object("score", td::JsonLong(score_id_pair_.first));
-    object("internal_id", td::JsonLong(score_id_pair_.second));
+    object("client_id", td::JsonLong(client_id_));
     if (!hide_sensible_data_) {
       object("token", td::JsonString(bot_.token_));
     }
