@@ -180,7 +180,7 @@ jobs:
           --amend ${{ env.IMAGE_TAG }}:${{ env.HASH_VERSION }}-linuxarmv7 \
           --amend ${{ env.IMAGE_TAG }}:${{ env.HASH_VERSION }}-linuxarm64 \
           --amend ${{ env.IMAGE_TAG }}:${{ env.HASH_VERSION }}-linuxppc64le
-          docker manifest push ${{ env.IMAGE_TAG }}:${{ env.HASH_VERSION }}
+          #docker manifest push ${{ env.IMAGE_TAG }}:${{ env.HASH_VERSION }}
 
           # Tag images as VERSION (like 'latest')
           docker tag ${{ env.IMAGE_TAG }}:${{ env.HASH_VERSION }}-linux386 ${{ env.IMAGE_TAG }}:${{ env.VERSION }}-linux386
@@ -197,7 +197,7 @@ jobs:
           --amend ${{ env.IMAGE_TAG }}:${{ env.VERSION }}-linuxarmv7 \
           --amend ${{ env.IMAGE_TAG }}:${{ env.VERSION }}-linuxarm64 \
           --amend ${{ env.IMAGE_TAG }}:${{ env.VERSION }}-linuxppc64le
-          docker manifest push ${{ env.IMAGE_TAG }}:${{ env.VERSION }}
+          #docker manifest push ${{ env.IMAGE_TAG }}:${{ env.VERSION }}
 
           # -- Push to Docker Hub
           docker tag ${{ env.IMAGE_TAG }}:${{ env.HASH_VERSION }}-linux386 ${{ env.IMAGE_TAG_DH }}:${{ env.VERSION }}-linux386
