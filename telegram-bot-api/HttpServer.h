@@ -12,6 +12,7 @@
 #include "td/actor/actor.h"
 
 #include "td/utils/BufferedFd.h"
+#include "td/utils/common.h"
 #include "td/utils/FloodControlFast.h"
 #include "td/utils/format.h"
 #include "td/utils/logging.h"
@@ -47,7 +48,7 @@ class HttpServer final : public td::TcpListener::Callback {
       return;
     }
     flood_control_.add_event(now);
-    LOG(INFO) << "Create tcp listener " << td::tag("address", ip_address_) << td::tag("port", port_);
+    LOG(INFO) << "Create TCP listener " << td::tag("address", ip_address_) << td::tag("port", port_);
     listener_ = td::create_actor<td::TcpListener>(
         PSLICE() << "TcpListener" << td::tag("address", ip_address_) << td::tag("port", port_), port_,
         actor_shared(this, 1), ip_address_);
@@ -66,7 +67,7 @@ class HttpServer final : public td::TcpListener::Callback {
       scheduler_id--;
     }
     td::create_actor<td::HttpInboundConnection>("HttpInboundConnection", td::BufferedFd<td::SocketFd>(std::move(fd)), 0,
-                                                20, 500, creator_(), scheduler_id)
+                                                50, 500, creator_(), scheduler_id)
         .release();
   }
 

@@ -229,7 +229,7 @@ td::Status WebhookActor::create_connection(td::BufferedFd<td::SocketFd> fd) {
   auto id = connections_.create(Connection());
   auto *conn = connections_.get(id);
   conn->actor_id_ = td::create_actor<td::HttpOutboundConnection>(
-      PSLICE() << "Connect:" << id, std::move(fd), std::move(ssl_stream), 0, 20, 60,
+      PSLICE() << "Connect:" << id, std::move(fd), std::move(ssl_stream), 0, 50, 60,
       td::ActorShared<td::HttpOutboundConnection::Callback>(actor_id(this), id), slow_scheduler_id_);
   conn->ip_generation_ = ip_generation_;
   conn->event_id_ = {};
@@ -399,7 +399,7 @@ void WebhookActor::load_updates() {
     CHECK(update.id.is_valid());
     auto &dest_ptr = update_map_[update.id];
     if (dest_ptr != nullptr) {
-      LOG(ERROR) << "Receive duplicated event " << update.id << " from TQueue";
+      LOG(ERROR) << "Receive duplicate event " << update.id << " from TQueue";
       continue;
     }
     dest_ptr = td::make_unique<Update>();
