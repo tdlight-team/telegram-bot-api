@@ -6,7 +6,7 @@ if (POLICY CMP0065)
   cmake_policy(SET CMP0065 NEW)
 endif()
 
-project(TelegramBotApi VERSION 6.6 LANGUAGES CXX)
+project(TelegramBotApi VERSION 6.7.1 LANGUAGES CXX)
 
 if (POLICY CMP0069)
   option(TELEGRAM_BOT_API_ENABLE_LTO "Use \"ON\" to enable Link Time Optimization.")
@@ -73,6 +73,9 @@ if (CLANG OR GCC)
     elseif (APPLE)
       set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-no_pie")
     endif()
+    include(AddCXXCompilerFlag)
+    add_cxx_compiler_flag("-static-libstdc++")
+    add_cxx_compiler_flag("-static-libgcc")
   endif()
 endif()
 

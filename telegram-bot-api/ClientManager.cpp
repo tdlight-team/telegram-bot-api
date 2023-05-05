@@ -177,13 +177,7 @@ void ClientManager::user_login(PromisedQueryPtr query) {
 }
 
 bool ClientManager::check_flood_limits(PromisedQueryPtr &query, bool is_user_login) {
-  td::string ip_address;
-  if (query->peer_address().is_valid() && !query->peer_address().is_reserved()) {  // external connection
-    ip_address = query->peer_address().get_ip_str().str();
-  } else {
-    // invalid peer address or connection from the local network
-    ip_address = query->get_header("x-real-ip").str();
-  }
+  td::string ip_address = query->get_peer_ip_address();
   if (!ip_address.empty()) {
     td::IPAddress tmp;
     tmp.init_host_port(ip_address, 0).ignore();
@@ -192,7 +186,7 @@ bool ClientManager::check_flood_limits(PromisedQueryPtr &query, bool is_user_log
       ip_address = tmp.get_ip_str().str();
     }
   }
-  LOG(DEBUG) << "Receive incoming query for new bot " << query->token() << " from " << query->peer_address();
+  LOG(DEBUG) << "Receive incoming query for new bot " << query->token() << " from " << ip_address;
   if (!ip_address.empty()) {
     LOG(DEBUG) << "Check Client creation flood control for IP address " << ip_address;
     if (is_user_login) {
