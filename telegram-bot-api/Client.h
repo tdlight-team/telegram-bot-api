@@ -110,6 +110,7 @@ class Client final : public WebhookActor::Callback {
   class JsonChatInviteLink;
   class JsonChat;
   class JsonMessageSender;
+  class JsonMessageOrigin;
   class JsonLinkPreviewOptions;
   class JsonAnimation;
   class JsonAudio;
