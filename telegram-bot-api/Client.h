@@ -112,6 +112,7 @@ class Client final : public WebhookActor::Callback {
   class JsonMessageSender;
   class JsonMessageOrigin;
   class JsonExternalReplyInfo;
+  class JsonTextQuote;
   class JsonLinkPreviewOptions;
   class JsonAnimation;
   class JsonAudio;
