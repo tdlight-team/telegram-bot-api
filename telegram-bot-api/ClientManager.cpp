@@ -296,7 +296,7 @@ void ClientManager::get_stats(td::Promise<td::BufferSlice> promise,
   auto top_clients = get_top_clients(50, id_filter);
 
   if(!as_json) {
-    sb << stat_.get_description() << '\n';
+    sb << BotStatActor::get_description() << '\n';
   }
   if (id_filter.empty()) {
     if(as_json) {
@@ -448,9 +448,6 @@ td::int64 ClientManager::get_tqueue_id(td::int64 user_id, bool is_test_dc) {
 }
 
 void ClientManager::start_up() {
-  //NB: the same scheduler as for database in Td
-  auto scheduler_id = 1;
-
   // init tqueue
   {
     auto load_start_time = td::Time::now();
@@ -478,7 +475,8 @@ void ClientManager::start_up() {
       }
     }
 
-    auto concurrent_binlog = std::make_shared<td::ConcurrentBinlog>(std::move(binlog), scheduler_id);
+    auto concurrent_binlog =
+        std::make_shared<td::ConcurrentBinlog>(std::move(binlog), SharedData::get_binlog_scheduler_id());
     auto concurrent_tqueue_binlog = td::make_unique<td::TQueueBinlog<td::BinlogInterface>>();
     concurrent_tqueue_binlog->set_binlog(std::move(concurrent_binlog));
     tqueue->set_callback(std::move(concurrent_tqueue_binlog));
@@ -493,7 +491,7 @@ void ClientManager::start_up() {
   // init webhook_db and user_db
   auto concurrent_webhook_db = td::make_unique<td::BinlogKeyValue<td::ConcurrentBinlog>>();
   auto status = concurrent_webhook_db->init(parameters_->working_directory_ + "webhooks_db.binlog", td::DbKey::empty(),
-                                            scheduler_id);
+                                            SharedData::get_binlog_scheduler_id());
   LOG_IF(FATAL, status.is_error()) << "Can't open webhooks_db.binlog " << status;
   parameters_->shared_data_->webhook_db_ = std::move(concurrent_webhook_db);
 
@@ -504,7 +502,7 @@ void ClientManager::start_up() {
 
   auto &webhook_db = *parameters_->shared_data_->webhook_db_;
   auto &user_db = *parameters_->shared_data_->user_db_;
-  for (auto key_value : webhook_db.get_all()) {
+  for (const auto key_value : webhook_db.get_all()) {
     if (!token_range_(td::to_integer<td::uint64>(key_value.first))) {
       LOG(WARNING) << "DROP WEBHOOK: " << key_value.first << " ---> " << key_value.second;
       webhook_db.erase(key_value.first);
@@ -516,8 +514,8 @@ void ClientManager::start_up() {
   }
 
   // launch watchdog
-  watchdog_id_ = td::create_actor_on_scheduler<Watchdog>(
-      "ManagerWatchdog", td::Scheduler::instance()->sched_count() - 3, td::this_thread::get_id(), WATCHDOG_TIMEOUT);
+  watchdog_id_ = td::create_actor_on_scheduler<Watchdog>("ManagerWatchdog", SharedData::get_watchdog_scheduler_id(),
+                                                         td::this_thread::get_id(), WATCHDOG_TIMEOUT);
   set_timeout_in(600.0);
 }
 
@@ -684,7 +682,7 @@ void ClientManager::raw_event(const td::Event::Raw &event) {
 
 void ClientManager::timeout_expired() {
   send_closure(watchdog_id_, &Watchdog::kick);
-  set_timeout_in(WATCHDOG_TIMEOUT / 2);
+  set_timeout_in(WATCHDOG_TIMEOUT / 10);
 
   double now = td::Time::now();
   if (now > next_tqueue_gc_time_) {

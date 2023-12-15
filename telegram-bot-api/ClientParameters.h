@@ -54,14 +54,53 @@ struct SharedData {
     return static_cast<td::int32>(result);
   }
 
-  static td::int32 get_database_scheduler_id() {
-    // the same scheduler as for database in Td
-    return 1;
-  }
-
   static td::int32 get_file_gc_scheduler_id() {
     // the same scheduler as for file GC in Td
     return 2;
+  }
+
+  static td::int32 get_client_scheduler_id() {
+    // the thread for ClientManager and all Clients
+    return 4;
+  }
+
+  static td::int32 get_watchdog_scheduler_id() {
+    // the thread for watchdogs
+    return 5;
+  }
+
+  static td::int32 get_slow_incoming_http_scheduler_id() {
+    // the thread for slow incoming HTTP connections
+    return 6;
+  }
+
+  static td::int32 get_slow_outgoing_http_scheduler_id() {
+    // the thread for slow outgoing HTTP connections
+    return 7;
+  }
+
+  static td::int32 get_dns_resolver_scheduler_id() {
+    // the thread for DNS resolving
+    return 8;
+  }
+
+  static td::int32 get_binlog_scheduler_id() {
+    // the thread for TQueue and webhook binlogs
+    return 9;
+  }
+
+  static td::int32 get_webhook_certificate_scheduler_id() {
+    // the thread for webhook certificate processing
+    return 10;
+  }
+
+  static td::int32 get_statistics_thread_id() {
+    // the thread for CPU usage updating
+    return 11;
+  }
+
+  static td::int32 get_thread_count() {
+    return 12;
   }
 };
 
