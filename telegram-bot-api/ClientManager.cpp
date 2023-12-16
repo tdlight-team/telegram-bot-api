@@ -496,13 +496,13 @@ void ClientManager::start_up() {
   parameters_->shared_data_->webhook_db_ = std::move(concurrent_webhook_db);
 
   auto concurrent_user_db = td::make_unique<td::BinlogKeyValue<td::ConcurrentBinlog>>();
-  status = concurrent_user_db->init(parameters_->working_directory_ + "user_db.binlog", td::DbKey::empty(), scheduler_id);
+  status = concurrent_user_db->init(parameters_->working_directory_ + "user_db.binlog", td::DbKey::empty(), SharedData::get_binlog_scheduler_id());
   LOG_IF(FATAL, status.is_error()) << "Can't open user_db.binlog " << status.error();
   parameters_->shared_data_->user_db_ = std::move(concurrent_user_db);
 
   auto &webhook_db = *parameters_->shared_data_->webhook_db_;
   auto &user_db = *parameters_->shared_data_->user_db_;
-  for (const auto key_value : webhook_db.get_all()) {
+  for (const auto &key_value : webhook_db.get_all()) {
     if (!token_range_(td::to_integer<td::uint64>(key_value.first))) {
       LOG(WARNING) << "DROP WEBHOOK: " << key_value.first << " ---> " << key_value.second;
       webhook_db.erase(key_value.first);

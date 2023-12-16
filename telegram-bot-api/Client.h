@@ -560,7 +560,7 @@ class Client final : public WebhookActor::Callback {
   static int64 get_int64_arg(const Query *query, td::Slice field_name, int64 default_value,
                              int64 min_value = std::numeric_limits<int64>::min(),
                              int64 max_value = std::numeric_limits<int64>::max());
-  static td::Result<td_api::object_ptr<td_api::ChatReportReason>> get_report_reason(const Query *query,
+  static td::Result<td_api::object_ptr<td_api::ReportReason>> get_report_reason(const Query *query,
                                                                                     td::Slice field_name = td::Slice("reason"));
 
   static td::Result<td_api::object_ptr<td_api::SearchMessagesFilter>> get_search_messages_filter(

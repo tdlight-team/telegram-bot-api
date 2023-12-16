@@ -8530,26 +8530,26 @@ td::int64 Client::get_int64_arg(const Query *query, td::Slice field_name, int64 
   return td::clamp(td::to_integer<int64>(s_arg), min_value, max_value);
 }
 
-td::Result<td_api::object_ptr<td_api::ChatReportReason>> Client::get_report_reason(const Query *query,
+td::Result<td_api::object_ptr<td_api::ReportReason>> Client::get_report_reason(const Query *query,
                                                                                    td::Slice field_name) {
   auto reason = query->arg(field_name);
-  object_ptr<td_api::ChatReportReason> result;
+  object_ptr<td_api::ReportReason> result;
   if (reason.empty()) {
     return td::Status::Error(400, "reason is not specified");
   } else if (reason == "child_abuse") {
-    result = make_object<td_api::chatReportReasonChildAbuse>();
+    result = make_object<td_api::reportReasonChildAbuse>();
   } else if (reason == "copyright") {
-    result = make_object<td_api::chatReportReasonCopyright>();
+    result = make_object<td_api::reportReasonCopyright>();
   } else if (reason == "pornography") {
-    result = make_object<td_api::chatReportReasonPornography>();
+    result = make_object<td_api::reportReasonPornography>();
   } else if (reason == "spam") {
-    result = make_object<td_api::chatReportReasonSpam>();
+    result = make_object<td_api::reportReasonSpam>();
   } else if (reason == "unrelated_location") {
-    result = make_object<td_api::chatReportReasonUnrelatedLocation>();
+    result = make_object<td_api::reportReasonUnrelatedLocation>();
   } else if (reason == "violence") {
-    result = make_object<td_api::chatReportReasonViolence>();
+    result = make_object<td_api::reportReasonViolence>();
   } else {
-    result = make_object<td_api::chatReportReasonCustom>();
+    result = make_object<td_api::reportReasonCustom>();
   }
   return std::move(result);
 }
@@ -9232,7 +9232,7 @@ td::Status Client::process_send_media_group_query(PromisedQueryPtr &query) {
             send_request(
                 make_object<td_api::sendMessageAlbum>(
                     chat_id, message_thread_id, get_input_message_reply_to(reply_to_message_id),
-                    get_message_send_options(disable_notification, protect_content), std::move(input_message_contents)),
+                    get_message_send_options(disable_notification, protect_content, std::move(send_at)), std::move(input_message_contents)),
                 td::make_unique<TdOnSendMessageAlbumCallback>(this, chat_id, message_count, std::move(query)));
           };
           check_message_thread(chat_id, message_thread_id, reply_to_message_id, std::move(query),
@@ -10972,7 +10972,7 @@ td::Status Client::process_report_chat_query(PromisedQueryPtr &query) {
              [this, reason = std::move(reason), message_ids = std::move(message_ids)](int64 chat_id,
                                                                                       PromisedQueryPtr query) mutable {
 
-               send_request(make_object<td_api::reportChat>(chat_id, std::move(message_ids), std::move(reason), reason->get_id() == td_api::chatReportReasonCustom::ID ? query->arg("reason").str() : td::string()),
+               send_request(make_object<td_api::reportChat>(chat_id, std::move(message_ids), std::move(reason), reason->get_id() == td_api::reportReasonCustom::ID ? query->arg("reason").str() : td::string()),
                             td::make_unique<TdOnOkQueryCallback>(std::move(query)));
              });
   return td::Status::OK();
