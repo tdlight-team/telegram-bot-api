@@ -72,7 +72,7 @@ struct ClientParameters {
   bool local_mode_ = false;
   bool allow_http_ = false;
   bool use_relative_path_ = false;
-  bool no_file_limit_ = true;
+  bool no_file_limit_ = false;
   bool allow_users_ = false;
   bool allow_users_registration_ = false;
   bool stats_hide_sensible_data_ = false;
