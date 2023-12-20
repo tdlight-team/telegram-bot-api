@@ -105,6 +105,7 @@ class Client final : public WebhookActor::Callback {
   class JsonUser;
   class JsonUsers;
   class JsonReactionType;
+  class JsonReactionCount;
   class JsonChatPermissions;
   class JsonChatPhotoInfo;
   class JsonChatLocation;
@@ -174,6 +175,7 @@ class Client final : public WebhookActor::Callback {
   class JsonForumTopicInfo;
   class JsonGameHighScore;
   class JsonMessageReactionUpdated;
+  class JsonMessageReactionCountUpdated;
   class JsonAddress;
   class JsonOrderInfo;
   class JsonSuccessfulPaymentBot;
@@ -1129,6 +1131,8 @@ class Client final : public WebhookActor::Callback {
 
   void add_update_message_reaction(object_ptr<td_api::updateMessageReaction> &&update);
 
+  void add_update_message_reaction_count(object_ptr<td_api::updateMessageReactions> &&update);
+
   // append only before Size
   enum class UpdateType : int32 {
     Message,
@@ -1150,6 +1154,7 @@ class Client final : public WebhookActor::Callback {
     ChatBoostUpdated,
     ChatBoostRemoved,
     MessageReaction,
+    MessageReactionCount,
     Size
   };
 
@@ -1179,10 +1184,11 @@ class Client final : public WebhookActor::Callback {
 
   bool have_message_access(int64 chat_id) const;
 
-  // by default ChatMember and MessageReaction updates are disabled
-  static constexpr td::uint32 DEFAULT_ALLOWED_UPDATE_TYPES = (1 << static_cast<int32>(UpdateType::Size)) - 1 -
-                                                             (1 << static_cast<int32>(UpdateType::ChatMember)) -
-                                                             (1 << static_cast<int32>(UpdateType::MessageReaction));
+  // by default ChatMember, MessageReaction, and MessageReactionCount updates are disabled
+  static constexpr td::uint32 DEFAULT_ALLOWED_UPDATE_TYPES =
+      (1 << static_cast<int32>(UpdateType::Size)) - 1 - (1 << static_cast<int32>(UpdateType::ChatMember)) -
+      (1 << static_cast<int32>(UpdateType::MessageReaction)) -
+      (1 << static_cast<int32>(UpdateType::MessageReactionCount));
 
   object_ptr<td_api::AuthorizationState> authorization_state_;
   bool was_authorized_ = false;
