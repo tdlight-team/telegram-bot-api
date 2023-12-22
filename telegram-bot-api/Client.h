@@ -190,6 +190,7 @@ class Client final : public WebhookActor::Callback {
   class JsonChatSetMessageAutoDeleteTime;
   class JsonWriteAccessAllowed;
   class JsonUserShared;
+  class JsonUsersShared;
   class JsonChatShared;
   class JsonGiveaway;
   class JsonGiveawayWinners;
