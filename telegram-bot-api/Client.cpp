@@ -345,7 +345,6 @@ bool Client::init_methods() {
   methods_.emplace("getmessageinfo", &Client::process_get_message_info_query);
   methods_.emplace("getparticipants", &Client::process_get_chat_members_query);
   methods_.emplace("getchatmembers", &Client::process_get_chat_members_query);
-  methods_.emplace("deletemessages", &Client::process_delete_messages_query);
   methods_.emplace("togglegroupinvites", &Client::process_toggle_group_invites_query);
   methods_.emplace("ping", &Client::process_ping_query);
   methods_.emplace("getmemorystats", &Client::process_get_memory_stats_query);
@@ -10231,9 +10230,10 @@ td::Status Client::process_copy_messages_query(PromisedQueryPtr &query) {
   auto disable_notification = to_bool(query->arg("disable_notification"));
   auto protect_content = to_bool(query->arg("protect_content"));
   auto remove_caption = to_bool(query->arg("remove_caption"));
+  TRY_RESULT(send_at, get_message_scheduling_state(query.get()));
 
   auto on_success = [this, from_chat_id = from_chat_id.str(), message_ids = std::move(message_ids),
-                     disable_notification, protect_content,
+                     disable_notification, protect_content, send_at = std::move(send_at),
                      remove_caption](int64 chat_id, int64 message_thread_id, CheckedReplyParameters,
                                      PromisedQueryPtr query) mutable {
     auto it = yet_unsent_message_count_.find(chat_id);
@@ -10243,8 +10243,8 @@ td::Status Client::process_copy_messages_query(PromisedQueryPtr &query) {
 
     check_messages(
         from_chat_id, std::move(message_ids), true, AccessRights::Read, "message to forward", std::move(query),
-        [this, chat_id, message_thread_id, disable_notification, protect_content, remove_caption](
-            int64 from_chat_id, td::vector<int64> message_ids, PromisedQueryPtr query) {
+        [this, chat_id, message_thread_id, disable_notification, protect_content, remove_caption, send_at = std::move(send_at)](
+            int64 from_chat_id, td::vector<int64> message_ids, PromisedQueryPtr query) mutable {
           auto &count = yet_unsent_message_count_[chat_id];
           if (count >= MAX_CONCURRENTLY_SENT_CHAT_MESSAGES) {
             return fail_query_flood_limit_exceeded(std::move(query));
@@ -10255,7 +10255,7 @@ td::Status Client::process_copy_messages_query(PromisedQueryPtr &query) {
 
           send_request(make_object<td_api::forwardMessages>(
                            chat_id, message_thread_id, from_chat_id, std::move(message_ids),
-                           get_message_send_options(disable_notification, protect_content), true, remove_caption),
+                           get_message_send_options(disable_notification, protect_content, std::move(send_at)), true, remove_caption),
                        td::make_unique<TdOnForwardMessagesCallback>(this, chat_id, message_count, std::move(query)));
         });
   };
@@ -10286,8 +10286,10 @@ td::Status Client::process_forward_messages_query(PromisedQueryPtr &query) {
   }
   auto disable_notification = to_bool(query->arg("disable_notification"));
   auto protect_content = to_bool(query->arg("protect_content"));
+  TRY_RESULT(send_at, get_message_scheduling_state(query.get()));
 
   auto on_success = [this, from_chat_id = from_chat_id.str(), message_ids = std::move(message_ids),
+                     send_at = std::move(send_at),
                      disable_notification, protect_content](int64 chat_id, int64 message_thread_id,
                                                             CheckedReplyParameters, PromisedQueryPtr query) mutable {
     auto it = yet_unsent_message_count_.find(chat_id);
@@ -10297,8 +10299,8 @@ td::Status Client::process_forward_messages_query(PromisedQueryPtr &query) {
 
     check_messages(
         from_chat_id, std::move(message_ids), true, AccessRights::Read, "message to forward", std::move(query),
-        [this, chat_id, message_thread_id, disable_notification, protect_content](
-            int64 from_chat_id, td::vector<int64> message_ids, PromisedQueryPtr query) {
+        [this, chat_id, message_thread_id, disable_notification, protect_content, send_at = std::move(send_at)](
+            int64 from_chat_id, td::vector<int64> message_ids, PromisedQueryPtr query) mutable {
           auto &count = yet_unsent_message_count_[chat_id];
           if (count >= MAX_CONCURRENTLY_SENT_CHAT_MESSAGES) {
             return fail_query_flood_limit_exceeded(std::move(query));
@@ -10309,7 +10311,7 @@ td::Status Client::process_forward_messages_query(PromisedQueryPtr &query) {
 
           send_request(make_object<td_api::forwardMessages>(
                            chat_id, message_thread_id, from_chat_id, std::move(message_ids),
-                           get_message_send_options(disable_notification, protect_content), false, false),
+                           get_message_send_options(disable_notification, protect_content, std::move(send_at)), false, false),
                        td::make_unique<TdOnForwardMessagesCallback>(this, chat_id, message_count, std::move(query)));
         });
   };
@@ -10351,7 +10353,7 @@ td::Status Client::process_send_media_group_query(PromisedQueryPtr &query) {
           send_request(
               make_object<td_api::sendMessageAlbum>(
                   chat_id, message_thread_id, get_input_message_reply_to(std::move(reply_parameters)),
-                  get_message_send_options(disable_notification, protect_content), std::move(send_at), std::move(input_message_contents)),
+                  get_message_send_options(disable_notification, protect_content, std::move(send_at)), std::move(input_message_contents)),
               td::make_unique<TdOnSendMessageAlbumCallback>(this, chat_id, message_count, std::move(query)));
         };
         check_reply_parameters(chat_id, std::move(reply_parameters), message_thread_id, std::move(query),
@@ -11893,48 +11895,6 @@ td::Status Client::process_get_chat_members_query(PromisedQueryPtr &query) {
   return td::Status::OK();
 }
 
-td::Status Client::process_delete_messages_query(PromisedQueryPtr &query) {
-  auto chat_id = query->arg("chat_id");
-
-  if (chat_id.empty()) {
-    return td::Status::Error(400, "Chat identifier is not specified");
-  }
-
-  auto start = as_client_message_id(get_message_id(query.get(), "start"));
-  auto end = as_client_message_id(get_message_id(query.get(), "end"));
-
-  if (start == 0 || end == 0) {
-    return td::Status::Error(400, "Message identifier is not specified");
-  }
-
-  if (start >= end) {
-    return td::Status::Error(400, "Initial message identifier is not lower than last message identifier");
-  }
-
-  if (static_cast<td::uint32>(end-start) > parameters_->max_batch_operations) {
-    return td::Status::Error(400, PSLICE() << "Too many operations: maximum number of batch operation is " << parameters_->max_batch_operations);
-  }
-
-  check_chat(chat_id, AccessRights::Write, std::move(query), [this, start, end](int64 chat_id, PromisedQueryPtr query) {
-    if (get_chat_type(chat_id) != ChatType::Supergroup) {
-      return fail_query(400, "Bad Request: method is available only for supergroups", std::move(query));
-    }
-
-    td::vector<td::int64> ids;
-    ids.reserve(end-start+1);
-    for (td::int32 i = start; i <= end; i++) {
-      ids.push_back(as_tdlib_message_id(i));
-    }
-
-    if (!ids.empty()) {
-      send_request(make_object<td_api::deleteMessages>(chat_id, std::move(ids), true),
-                   td::make_unique<TdOnOkQueryCallback>(std::move(query)));
-    }
-  });
-
-  return td::Status::OK();
-}
-
 td::Status Client::process_toggle_group_invites_query(PromisedQueryPtr &query) {
   answer_query(td::JsonFalse(), std::move(query), "Not implemented");
   return td::Status::OK();
@@ -12636,7 +12596,7 @@ void Client::do_send_message(object_ptr<td_api::InputMessageContent> input_messa
 
           send_request(make_object<td_api::sendMessage>(chat_id, message_thread_id,
                                                         get_input_message_reply_to(std::move(reply_parameters)),
-                                                        get_message_send_options(disable_notification, protect_content), std::move(send_at),
+                                                        get_message_send_options(disable_notification, protect_content, std::move(send_at)),
                                                         std::move(reply_markup), std::move(input_message_content)),
                        td::make_unique<TdOnSendMessageCallback>(this, chat_id, std::move(query)));
         };
