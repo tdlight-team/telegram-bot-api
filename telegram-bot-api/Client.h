@@ -159,6 +159,10 @@ class Client final : public WebhookActor::Callback {
   class JsonChatMembers;
   class JsonChatMemberUpdated;
   class JsonChatJoinRequest;
+  class JsonChatBoostSource;
+  class JsonChatBoost;
+  class JsonChatBoostUpdated;
+  class JsonChatBoostRemoved;
   class JsonForumTopicCreated;
   class JsonForumTopicEdited;
   class JsonForumTopicInfo;
@@ -1042,6 +1046,8 @@ class Client final : public WebhookActor::Callback {
 
   static int32 as_scheduled_message_id(int64 message_id);
 
+  static int32 as_client_message_id_unchecked(int64 message_id);
+
   static int64 get_supergroup_chat_id(int64 supergroup_id);
 
   static int64 get_basic_group_chat_id(int64 basic_group_id);
@@ -1075,6 +1081,8 @@ class Client final : public WebhookActor::Callback {
 
   void add_update_chat_join_request(object_ptr<td_api::updateNewChatJoinRequest> &&update);
 
+  void add_update_chat_boost(object_ptr<td_api::updateChatBoost> &&update);
+
   // append only before Size
   enum class UpdateType : int32 {
     Message,
@@ -1093,6 +1101,8 @@ class Client final : public WebhookActor::Callback {
     MyChatMember,
     ChatMember,
     ChatJoinRequest,
+    ChatBoostUpdated,
+    ChatBoostRemoved,
     Size
   };
 
