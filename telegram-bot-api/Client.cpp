@@ -758,10 +758,10 @@ class Client::JsonMessage final : public td::Jsonable {
 
 class Client::JsonChat final : public td::Jsonable {
  public:
-  JsonChat(int64 chat_id, bool is_full, const Client *client, int64 pinned_message_id = -1, int32 distance = -1)
+  JsonChat(int64 chat_id, const Client *client, bool is_full = false, int64 pinned_message_id = -1, int32 distance = -1)
       : chat_id_(chat_id)
-      , is_full_(is_full)
       , client_(client)
+      , is_full_(is_full)
       , pinned_message_id_(pinned_message_id)
       , distance_(distance) {
   }
@@ -992,8 +992,8 @@ class Client::JsonChat final : public td::Jsonable {
 
  private:
   int64 chat_id_;
-  bool is_full_;
   const Client *client_;
+  bool is_full_;
   int64 pinned_message_id_;
   int32 distance_;
 };
@@ -1013,7 +1013,7 @@ class Client::JsonMessageSender final : public td::Jsonable {
       }
       case td_api::messageSenderChat::ID: {
         auto sender_chat_id = static_cast<const td_api::messageSenderChat *>(sender_id_)->chat_id_;
-        JsonChat(sender_chat_id, false, client_).store(scope);
+        JsonChat(sender_chat_id, client_).store(scope);
         break;
       }
       default:
@@ -1043,7 +1043,7 @@ class Client::JsonMessageOrigin final : public td::Jsonable {
       case td_api::messageOriginChat::ID: {
         auto origin = static_cast<const td_api::messageOriginChat *>(message_origin_);
         object("type", "chat");
-        object("sender_chat", JsonChat(origin->sender_chat_id_, false, client_));
+        object("sender_chat", JsonChat(origin->sender_chat_id_, client_));
         if (!origin->author_signature_.empty()) {
           object("author_signature", origin->author_signature_);
         }
@@ -1060,7 +1060,7 @@ class Client::JsonMessageOrigin final : public td::Jsonable {
       case td_api::messageOriginChannel::ID: {
         auto origin = static_cast<const td_api::messageOriginChannel *>(message_origin_);
         object("type", "channel");
-        object("chat", JsonChat(origin->chat_id_, false, client_));
+        object("chat", JsonChat(origin->chat_id_, client_));
         object("message_id", as_client_message_id(origin->message_id_));
         if (!origin->author_signature_.empty()) {
           object("author_signature", origin->author_signature_);
@@ -1617,7 +1617,7 @@ class Client::JsonPollAnswer final : public td::Jsonable {
       case td_api::messageSenderChat::ID: {
         auto voter_chat_id = static_cast<const td_api::messageSenderChat *>(poll_answer_->voter_id_.get())->chat_id_;
         object("user", JsonUser(client_->channel_bot_user_id_, client_));
-        object("voter_chat", JsonChat(voter_chat_id, false, client_));
+        object("voter_chat", JsonChat(voter_chat_id, client_));
         break;
       }
       default:
@@ -2019,8 +2019,7 @@ class Client::JsonGiveaway final : public td::Jsonable {
     for (auto chat_id : giveaway_->parameters_->additional_chat_ids_) {
       chat_ids.push_back(chat_id);
     }
-    object("chats",
-           td::json_array(chat_ids, [client = client_](auto &chat_id) { return JsonChat(chat_id, false, client); }));
+    object("chats", td::json_array(chat_ids, [client = client_](auto &chat_id) { return JsonChat(chat_id, client); }));
     object("winners_selection_date", giveaway_->parameters_->winners_selection_date_);
     object("winner_count", giveaway_->winner_count_);
     if (giveaway_->parameters_->only_new_members_) {
@@ -2174,7 +2173,7 @@ class Client::JsonExternalReplyInfo final : public td::Jsonable {
     auto object = scope->enter_object();
     object("origin", JsonMessageOrigin(reply_->origin_.get(), reply_->origin_send_date_, client_));
     if (reply_->chat_id_ != 0) {
-      object("chat", JsonChat(reply_->chat_id_, false, client_));
+      object("chat", JsonChat(reply_->chat_id_, client_));
       if (reply_->message_id_ != 0) {
         object("message_id", as_client_message_id(reply_->message_id_));
       }
@@ -2310,9 +2309,9 @@ void Client::JsonMessage::store(td::JsonValueScope *scope) const {
     object("author_signature", message_->author_signature);
   }
   if (message_->sender_chat_id != 0) {
-    object("sender_chat", JsonChat(message_->sender_chat_id, false, client_));
+    object("sender_chat", JsonChat(message_->sender_chat_id, client_));
   }
-  object("chat", JsonChat(message_->chat_id, false, client_));
+  object("chat", JsonChat(message_->chat_id, client_));
   object("date", message_->date);
   if (message_->edit_date > 0) {
     object("edit_date", message_->edit_date);
@@ -2347,7 +2346,7 @@ void Client::JsonMessage::store(td::JsonValueScope *scope) const {
       }
       case td_api::messageOriginChat::ID: {
         auto forward_info = static_cast<const td_api::messageOriginChat *>(message_->forward_origin.get());
-        object("forward_from_chat", JsonChat(forward_info->sender_chat_id_, false, client_));
+        object("forward_from_chat", JsonChat(forward_info->sender_chat_id_, client_));
         if (!forward_info->author_signature_.empty()) {
           object("forward_signature", forward_info->author_signature_);
         }
@@ -2362,7 +2361,7 @@ void Client::JsonMessage::store(td::JsonValueScope *scope) const {
       }
       case td_api::messageOriginChannel::ID: {
         auto forward_info = static_cast<const td_api::messageOriginChannel *>(message_->forward_origin.get());
-        object("forward_from_chat", JsonChat(forward_info->chat_id_, false, client_));
+        object("forward_from_chat", JsonChat(forward_info->chat_id_, client_));
         object("forward_from_message_id", as_client_message_id(forward_info->message_id_));
         if (!forward_info->author_signature_.empty()) {
           object("forward_signature", forward_info->author_signature_);
@@ -2764,7 +2763,7 @@ class Client::JsonDeletedMessage final : public td::Jsonable {
   void store(td::JsonValueScope *scope) const {
     auto object = scope->enter_object();
     object("message_id", as_client_message_id(message_id_));
-    object("chat", JsonChat(chat_id_, false, client_));
+    object("chat", JsonChat(chat_id_, client_));
     object("date", 0);
   }
 
@@ -3263,7 +3262,7 @@ class Client::JsonChatMemberUpdated final : public td::Jsonable {
   }
   void store(td::JsonValueScope *scope) const {
     auto object = scope->enter_object();
-    object("chat", JsonChat(update_->chat_id_, false, client_));
+    object("chat", JsonChat(update_->chat_id_, client_));
     object("from", JsonUser(update_->actor_user_id_, client_));
     object("date", update_->date_);
     auto chat_type = client_->get_chat_type(update_->chat_id_);
@@ -3289,7 +3288,7 @@ class Client::JsonChatJoinRequest final : public td::Jsonable {
   }
   void store(td::JsonValueScope *scope) const {
     auto object = scope->enter_object();
-    object("chat", JsonChat(update_->chat_id_, false, client_));
+    object("chat", JsonChat(update_->chat_id_, client_));
     object("from", JsonUser(update_->request_->user_id_, client_));
     object("user_chat_id", update_->user_chat_id_);
     object("date", update_->request_->date_);
@@ -3371,7 +3370,7 @@ class Client::JsonChatBoostUpdated final : public td::Jsonable {
   }
   void store(td::JsonValueScope *scope) const {
     auto object = scope->enter_object();
-    object("chat", JsonChat(update_->chat_id_, false, client_));
+    object("chat", JsonChat(update_->chat_id_, client_));
     object("boost", JsonChatBoost(update_->boost_.get(), client_));
   }
 
@@ -3386,7 +3385,7 @@ class Client::JsonChatBoostRemoved final : public td::Jsonable {
   }
   void store(td::JsonValueScope *scope) const {
     auto object = scope->enter_object();
-    object("chat", JsonChat(update_->chat_id_, false, client_));
+    object("chat", JsonChat(update_->chat_id_, client_));
     object("boost_id", update_->boost_->id_);
     object("remove_date", update_->boost_->start_date_);
     object("source", JsonChatBoostSource(update_->boost_->source_.get(), client_));
@@ -3617,7 +3616,7 @@ class Client::JsonChats : public td::Jsonable {
   void store(td::JsonValueScope *scope) const {
     auto array = scope->enter_array();
     for (auto &chat : chats_->chat_ids_) {
-      array << JsonChat(chat, false, client_);
+      array << JsonChat(chat, client_);
     }
   }
 
@@ -3634,10 +3633,10 @@ class Client::JsonChatsNearby : public td::Jsonable {
   void store(td::JsonValueScope *scope) const {
     auto array = scope->enter_array();
     for (auto &chat : chats_nearby_->users_nearby_) {
-      array << JsonChat(chat->chat_id_, false, client_, -1, chat->distance_);
+      array << JsonChat(chat->chat_id_, client_, false, -1, chat->distance_);
     }
     for (auto &chat : chats_nearby_->supergroups_nearby_) {
-      array << JsonChat(chat->chat_id_, false, client_, -1, chat->distance_);
+      array << JsonChat(chat->chat_id_, client_, false, -1, chat->distance_);
     }
   }
 
@@ -4511,7 +4510,7 @@ class Client::TdOnGetChatStickerSetCallback final : public TdQueryCallback {
       client_->on_get_sticker_set_name(sticker_set->id_, sticker_set->name_);
     }
 
-    answer_query(JsonChat(chat_id_, true, client_, pinned_message_id_), std::move(query_));
+    answer_query(JsonChat(chat_id_, client_, true, pinned_message_id_), std::move(query_));
   }
 
  private:
@@ -4558,7 +4557,7 @@ class Client::TdOnGetChatPinnedMessageCallback final : public TdQueryCallback {
       }
     }
 
-    answer_query(JsonChat(chat_id_, true, client_, pinned_message_id), std::move(query_));
+    answer_query(JsonChat(chat_id_, client_, true, pinned_message_id), std::move(query_));
   }
 
  private:
@@ -5182,7 +5181,7 @@ class Client::TdOnJoinChatCallback : public TdQueryCallback {
     }
     CHECK(result->get_id() == td_api::ok::ID);
 
-    answer_query(JsonChat(chat_id_, false, client_), std::move(query_));
+    answer_query(JsonChat(chat_id_, client_), std::move(query_));
   }
 
  private:
@@ -5204,7 +5203,7 @@ class Client::TdOnReturnChatCallback : public TdQueryCallback {
     CHECK(result->get_id() == td_api::chat::ID);
 
     auto chat = move_object_as<td_api::chat>(result);
-    answer_query(JsonChat(chat->id_, false, client_), std::move(query_));
+    answer_query(JsonChat(chat->id_, client_), std::move(query_));
   }
 
  private:
