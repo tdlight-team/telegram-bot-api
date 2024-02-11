@@ -54,17 +54,6 @@ Get the member list of a supergroup or channel
 
 ###### Returns `ChatMember`
 
-##### Method `deleteMessages`
-Delete all the messages with message_id in range between `start` and `end`.  
-The `start` parameter MUST be less than the `end` parameter  
-Both `start` and `end` must be positive non zero numbers  
-The method will always return `true` as a result, even if the messages cannot be deleted  
-This method does not work on private chat or normal groups
-It is not suggested to delete more than 200 messages per call
-
-**NOTE**  
-The maximum number of messages to be deleted in a single batch is determined by the `max-batch-operations` parameter and is 10000 by default
-
 ###### Parameters
 - `chat_id` Chat id
 - `start` First message id to delete
@@ -121,6 +110,17 @@ _For Docker containers, `$TELEGRAM_VERBOSITY` can be set._
 
 ##### Method `getChat`
 The command `getChat` will also try to resolve the username online, if it can't be found locally
+
+##### Method `deleteMessages`
+The command `deleteMessages` can also delete all the messages with message_id in range between `start` and `end`.  
+The `start` parameter MUST be less than the `end` parameter  
+Both `start` and `end` must be positive non-zero numbers  
+The method will always return `true` as a result, even if the messages cannot be deleted  
+This method does not work on private chat or normal groups
+It is not suggested to delete more than 200 messages per call
+
+**NOTE**  
+The maximum number of messages to be deleted in a single batch is determined by the `max-batch-operations` parameter and is 10000 by default
 
 ##### Object `Message`
 The `Message` object now has two new fields:

@@ -10592,6 +10592,10 @@ td::Status Client::process_delete_message_query(PromisedQueryPtr &query) {
 }
 
 td::Status Client::process_delete_messages_query(PromisedQueryPtr &query) {
+  auto is_range_delete_query = query->arg("start").empty() && query->arg("end").empty();
+  if (is_range_delete_query) {
+    return process_delete_messages_range_query(query);
+  }
   auto chat_id = query->arg("chat_id");
   TRY_RESULT(message_ids, get_message_ids(query.get(), 100));
   if (message_ids.empty()) {
@@ -11973,6 +11977,48 @@ td::Status Client::process_enable_proxy_query(PromisedQueryPtr &query) {
 td::Status Client::process_disable_proxy_query(PromisedQueryPtr &query) {
   send_request(make_object<td_api::disableProxy>(),
                td::make_unique<TdOnOkQueryCallback>(std::move(query)));
+  return td::Status::OK();
+}
+
+td::Status Client::process_delete_messages_range_query(PromisedQueryPtr &query) {
+  auto chat_id = query->arg("chat_id");
+
+  if (chat_id.empty()) {
+    return td::Status::Error(400, "Chat identifier is not specified");
+  }
+
+  auto start = as_client_message_id(get_message_id(query.get(), "start"));
+  auto end = as_client_message_id(get_message_id(query.get(), "end"));
+
+  if (start == 0 || end == 0) {
+    return td::Status::Error(400, "Message identifier is not specified");
+  }
+
+  if (start >= end) {
+    return td::Status::Error(400, "Initial message identifier is not lower than last message identifier");
+  }
+
+  if (static_cast<td::uint32>(end-start) > parameters_->max_batch_operations) {
+    return td::Status::Error(400, PSLICE() << "Too many operations: maximum number of batch operation is " << parameters_->max_batch_operations);
+  }
+
+  check_chat(chat_id, AccessRights::Write, std::move(query), [this, start, end](int64 chat_id, PromisedQueryPtr query) {
+    if (get_chat_type(chat_id) != ChatType::Supergroup) {
+      return fail_query(400, "Bad Request: method is available only for supergroups", std::move(query));
+    }
+
+    td::vector<td::int64> ids;
+    ids.reserve(end-start+1);
+    for (td::int32 i = start; i <= end; i++) {
+      ids.push_back(as_tdlib_message_id(i));
+    }
+
+    if (!ids.empty()) {
+      send_request(make_object<td_api::deleteMessages>(chat_id, std::move(ids), true),
+                   td::make_unique<TdOnOkQueryCallback>(std::move(query)));
+    }
+  });
+
   return td::Status::OK();
 }
 //end custom methods impl

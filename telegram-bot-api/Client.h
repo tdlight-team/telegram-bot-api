@@ -762,6 +762,7 @@ class Client final : public WebhookActor::Callback {
   td::Status process_delete_proxy_query(PromisedQueryPtr &query);
   td::Status process_enable_proxy_query(PromisedQueryPtr &query);
   td::Status process_disable_proxy_query(PromisedQueryPtr &query);
+  td::Status process_delete_messages_range_query(PromisedQueryPtr &query);
 
   //custom user methods
   td::Status process_get_chats_query(PromisedQueryPtr &query);
