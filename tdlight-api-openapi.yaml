@@ -544,6 +544,115 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /deleteMessages:
+    post:
+      tags:
+        - modified
+      description: |-
+        Use this method to delete multiple messages simultaneously.
+        This method can delete a set of message ids, or a range of message ids.
+        
+        If you specify "message_ids", this method tries to delete the specified set of ids:
+          If some of the specified messages can't be found, they are skipped.
+          Returns True on success.
+
+        If you specify "start" and "end", this method deletes all the messages with message_id in range between start and end:
+          The start parameter MUST be less than the end parameter
+          Both start and end must be positive non zero numbers
+          The method will always return true as a result, even if the messages cannot be deleted
+          This method does not work on private chat or normal groups It is not suggested to delete more than 200 messages per call.
+
+          *NOTE*
+          The maximum number of messages to be deleted in a single batch is determined by the max-batch-operations parameter and is 10000 by default.
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                chat_id:
+                  description: Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
+                  anyOf:
+                    - type: integer
+                    - type: string
+                message_ids:
+                  type: array
+                  items:
+                    type: integer
+                start:
+                  description: First message id to delete
+                  type: integer
+                end:
+                  description: Last message id to delete
+                  type: integer
+              required:
+                - chat_id
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                chat_id:
+                  description: Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
+                  anyOf:
+                    - type: integer
+                    - type: string
+                message_ids:
+                  type: array
+                  items:
+                    type: integer
+                start:
+                  description: First message id to delete
+                  type: integer
+                end:
+                  description: Last message id to delete
+                  type: integer
+              required:
+                - chat_id
+          application/json:
+            schema:
+              type: object
+              properties:
+                chat_id:
+                  description: Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
+                  anyOf:
+                    - type: integer
+                    - type: string
+                message_ids:
+                  type: array
+                  items:
+                    type: integer
+                start:
+                  description: First message id to delete
+                  type: integer
+                end:
+                  description: Last message id to delete
+                  type: integer
+              required:
+                - chat_id
+        required: true
+      responses:
+        '200':
+          description: 'Request was successful, the result is returned.'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    default: true
+                    type: boolean
+                  result:
+                    default: true
+                    type: boolean
+                required:
+                  - ok
+                  - result
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /ping:
     post:
       tags:
