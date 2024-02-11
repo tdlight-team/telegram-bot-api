@@ -10592,10 +10592,7 @@ td::Status Client::process_delete_message_query(PromisedQueryPtr &query) {
 }
 
 td::Status Client::process_delete_messages_query(PromisedQueryPtr &query) {
-  auto is_range_delete_query = query->arg("start").empty() && query->arg("end").empty();
-  if (is_range_delete_query) {
-    return process_delete_messages_range_query(query);
-  }
+  if (!query->arg("start").empty() || !query->arg("end").empty()) return process_delete_messages_range_query(query);
   auto chat_id = query->arg("chat_id");
   TRY_RESULT(message_ids, get_message_ids(query.get(), 100));
   if (message_ids.empty()) {
