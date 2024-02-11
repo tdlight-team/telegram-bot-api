@@ -3,18 +3,185 @@
 
 <head>
 <title>Telegram Bot API server build instructions</title>
-<style>
-.hide { display: none; }
-div.main { max-width:1200px; margin: auto; font-size: x-large; }
-select.large { font-size: large; }
-</style>
+  <style>
+    :root {
+      --background: #fafafa;
+      --color: black;
+      --color-primary: #0088ff;
+      --color-code-block: #ebf9ff;
+      --color-select-border: rgb(211, 211, 211);
+      --color-checkbox-background: rgb(211, 211, 211);
+      --color-checkbox-tick: #ffffff;
+      --color-copy-success-background: #c1ffc6;
+      --color-copy-success-border: rgb(0, 255, 0);
+      --color-copy-fail-background: #ffcbcb;
+      --color-copy-fail-border: rgb(255, 0, 0);
+
+      color: var(--color);
+      background: var(--background);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --background: #0e0e0e;
+        --color: rgb(190, 190, 190);
+        --color-primary: #0088ff;
+        --color-code-block: #101315;
+        --color-select-border: rgb(54, 54, 54);
+        --color-checkbox-background: rgb(51, 51, 51);
+        --color-checkbox-tick: #ffffff;
+        --color-copy-success-background: #001f00;
+        --color-copy-success-border: rgb(0, 255, 0);
+        --color-copy-fail-background: #1f0000;
+        --color-copy-fail-border: rgb(255, 0, 0);
+      }
+    }
+    body {
+      font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+    }
+    .hide {
+      display: none;
+    }
+    div.main {
+      max-width: 1250px;
+      padding: 25px;
+      margin: auto;
+      font-size: 16px;
+    }
+
+    p {
+      margin: 0;
+    }
+    .main > div {
+      margin-bottom: 20px;
+    }
+
+    #buildCommands {
+      font-family: Consolas, monospace;
+      margin-left: 40px;
+      background: var(--color-code-block);
+      padding: 5px;
+      margin-bottom: 0;
+      display: block;
+    }
+    #buildCommands ul {
+      list-style: '$ ';
+    }
+
+    a {
+      color: var(--color-primary);
+      text-decoration-color: transparent;
+      transition: text-decoration-color 200ms;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    select, button {
+      border: 1px solid var(--color-select-border);
+      background-color: var(--background);
+      color: var(--color);
+      padding: 5px;
+      margin-top: 5px;
+      transition: border 200ms, padding 200ms;
+      border-radius: 999em;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    select:focus, button:focus {
+      outline: none;
+      border-color: var(--color-primary);
+      border-width: 2px;
+      padding: 4px;
+    }
+
+    label * {
+      vertical-align: middle;
+    }
+
+    input[type=checkbox] {
+      margin-right: 5px;
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      background-color: var(--color-checkbox-background);
+      height: 20px;
+      width: 20px;
+      border-radius: 3px;
+      position: relative;
+      transition: background-color 200ms;
+    }
+    input[type=checkbox]::after {
+      content: "";
+      transition: border-color 200ms;
+      position: absolute;
+      left: 6px;
+      top: 2px;
+      width: 5px;
+      height: 10px;
+      border: solid transparent;
+      border-width: 0 3px 3px 0;
+      -webkit-transform: rotate(45deg);
+      -ms-transform: rotate(45deg);
+      transform: rotate(45deg);
+    }
+    input[type=checkbox]:checked {
+      background-color: var(--color-primary);
+    }
+    input[type=checkbox]:checked::after {
+      border-color: var(--color-checkbox-tick);
+    }
+
+    input[type=radio] {
+      margin-right: 5px;
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      background-color: var(--color-checkbox-background);
+      height: 20px;
+      width: 20px;
+      border-radius: 100%;
+      position: relative;
+      transition: background-color 200ms;
+    }
+    input[type=radio]::after {
+      content: "";
+      transition: border-color 200ms;
+      position: absolute;
+      left: 10px;
+      top: 10px;
+      width: 0;
+      height: 0;
+      border-radius: 100%;
+      background-color: transparent;
+      transition: width 200ms, height 200ms, left 200ms, top 200ms, background-color 100ms;
+    }
+    input[type=radio]:checked::after {
+      background-color: var(--color-primary);
+      left: 2px;
+      top: 2px;
+      width: 16px;
+      height: 16px;
+    }
+
+    #copyBuildCommandsButton {
+      margin-left: 40px;
+    }
+    #copyBuildCommandsButton.success {
+      background: var(--color-copy-success-background);
+      border-color: var(--color-copy-success-border);
+    }
+    #copyBuildCommandsButton.fail {
+      background: var(--color-copy-fail-background);
+      border-color: var(--color-copy-fail-border);
+    }
+  </style>
 </head>
 
 <body onload="onLoad(true)" onpopstate="onLoad(false)">
 
 <div class="main">
-  <div id="osSelectDiv" class="large" style="text-align:center;">
-    <p>Choose an operating system, on which you want to use the Telegram Bot API server:</p>
+  <div id="osSelectDiv" class="large">
+    <p>Choose an operating system on which you want to use the Telegram Bot API server:</p>
     <select id="osSelect" onchange="onOsChanged(false)" autofocus class="large">
       <option>Choose an operating system:</option>
       <option>Windows</option>
@@ -27,26 +194,26 @@ select.large { font-size: large; }
     <p></p>
   </div>
 
-  <div id="linuxSelectDiv" class="hide" style="text-align:center;">
-    <p>Choose a Linux distro, on which you want to use the Telegram Bot API server:</p>
+  <div id="linuxSelectDiv" class="hide">
+    <p>Choose a Linux distro on which you want to use the Telegram Bot API server:</p>
     <select id="linuxSelect" onchange="onOsChanged(false)" class="large">
       <option>Choose a Linux distro:</option>
       <option>Alpine</option>
       <option>CentOS 7</option>
       <option>CentOS 8</option>
-      <option>Debian 8</option>
-      <option>Debian 9</option>
-      <option>Debian 10</option>
+      <option>Debian 8/9</option>
+      <option>Debian 10+</option>
       <option>Ubuntu 14</option>
       <option>Ubuntu 16</option>
       <option>Ubuntu 18</option>
       <option>Ubuntu 20</option>
+      <option>Ubuntu 22</option>
       <option>Other</option>
     </select>
     <p></p>
   </div>
 
-  <div id="buildOptionsDiv" class="hide" style="text-align:center;">
+  <div id="buildOptionsDiv" class="hide">
     <div id="buildDebugDiv" class="hide">
       <label><input type="checkbox" id="buildDebugCheckbox" onchange="onOptionsChanged()"/>Build the debug binary. Debug binaries are much larger and slower than the release one.</label>
     </div>
@@ -78,6 +245,13 @@ select.large { font-size: large; }
       <p></p>
     </div>
 
+    <div id="buildMacOsHostDiv" class="hide">
+      <span>Choose host architecture:</span><br>
+      <label><input type="radio" id="buildMacOsHostRadioAppleSilicon" name="buildMacOsHostRadio" onchange="onOptionsChanged()" checked/>Apple silicon</label>
+      <label><input type="radio" id="buildMacOsHostRadioIntel" name="buildMacOsHostRadio" onchange="onOptionsChanged()"/>Intel</label>
+      <p></p>
+    </div>
+
     <div id="buildBitnessDiv" class="hide">
       <span>Choose for which bitness you want to build the Telegram Bot API server:</span><br>
       <label><input type="radio" id="buildBitnessRadio64" name="buildBitnessRadio" onchange="onOptionsChanged()" checked/>64</label>
@@ -92,13 +266,16 @@ select.large { font-size: large; }
     <p></p>
   </div>
 
-  <div id="buildTextDiv" class="hide" style="text-align:center;">
+  <div id="buildTextDiv" class="hide">
     <p id="buildText">Hidden text</p>
   </div>
 
-  <div id="buildCommandsDiv" class="hide" style="text-align:left;">
+  <div id="buildCommandsDiv" class="hide">
     <p id="buildPre">Hidden text</p>
     <code id="buildCommands">Empty commands</code>
+    <button id="copyBuildCommandsButton" onclick="copyBuildInstructions()">
+        <span id="copyBuildCommandsText">Copy</span>
+    </button>
   </div>
 </div>
 
@@ -194,6 +371,8 @@ function onOptionsChanged() {
   var use_powershell = false;
   var use_cmd = false;
   var use_csh = false;
+  var homebrew_install_dir = '';
+  var os_mac_host_name = '';
   if (os_windows) {
     document.getElementById('buildShellDiv').style.display = 'block';
     use_powershell = document.getElementById('buildShellRadioPowerShell').checked;
@@ -205,6 +384,18 @@ function onOptionsChanged() {
     use_csh = document.getElementById('buildShellBsdRadioCsh').checked;
   } else {
     document.getElementById('buildShellBsdDiv').style.display = 'none';
+  }
+  if (os_mac) {
+    document.getElementById('buildMacOsHostDiv').style.display = 'block';
+    if (document.getElementById('buildMacOsHostRadioAppleSilicon').checked) {
+      homebrew_install_dir = '/opt/homebrew';
+      os_mac_host_name = 'Apple silicon';
+    } else {
+      homebrew_install_dir = '/usr/local';
+      os_mac_host_name = 'Intel';
+    }
+  } else {
+    document.getElementById('buildMacOsHostDiv').style.display = 'none';
   }
 
   var use_msvc = os_windows;
@@ -249,10 +440,9 @@ function onOptionsChanged() {
     pre_text.push('Download and install <a href="https://visualstudio.microsoft.com/ru/vs/community/">Microsoft Visual Studio</a>. Enable C++ support while installing.');
     pre_text.push('Download and install <a href="https://cmake.org/download/">CMake</a>; choose "Add CMake to the system PATH" option while installing.');
     pre_text.push('Download and install <a href="https://git-scm.com/download/win">Git</a>.');
-    pre_text.push('Download and install <a href="https://sourceforge.net/projects/gnuwin32/files/gperf/3.0.1/">gperf</a>. Add the path to gperf.exe to the PATH environment variable.');
   }
   if (os_linux && linux_distro === 'Other') {
-    var compiler = use_clang ? 'clang >= 3.4' : 'g++ >= 4.9.2';
+    var compiler = use_clang ? 'clang >= 3.4, libc++' : 'g++ >= 4.9.2';
     pre_text.push('Install Git, ' + compiler + ', make, CMake >= 3.0.2, OpenSSL-dev, zlib-dev, gperf using your package manager.');
   }
   if (os_freebsd) {
@@ -264,7 +454,7 @@ function onOptionsChanged() {
     pre_text.push('Note that building requires a lot of memory, so you may need to increase allowed per-process memory usage in /etc/login.conf or build from root.');
   }
   if (os_netbsd) {
-    pre_text.push('Note that the following instruction is for NetBSD 8.0 and default SH shell.');
+    pre_text.push('Note that the following instruction is for NetBSD 8+ and default SH shell.');
   }
 
   var terminal_name = (function () {
@@ -304,6 +494,8 @@ function onOptionsChanged() {
         return '-6.0';
       case 'Ubuntu 20':
         return '-10';
+      case 'Ubuntu 22':
+        return '-14';
       default:
         return ''; // use default version
     }
@@ -314,7 +506,7 @@ function onOptionsChanged() {
   var cmake = 'cmake';
   if (os_mac) {
     commands.push('xcode-select --install');
-    commands.push('/usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"');
+    commands.push('/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"');
     commands.push('brew install gperf cmake openssl');
   } else if (os_linux && linux_distro !== 'Other') {
     switch (linux_distro) {
@@ -334,18 +526,18 @@ function onOptionsChanged() {
           cmake = 'cmake3';
           packages += ' gperf';
         } else {
-          commands.push(sudo + 'dnf --enablerepo=PowerTools install gperf');
+          commands.push(sudo + 'dnf --enablerepo=powertools install gperf');
         }
         packages += ' ' + cmake;
         commands.push(sudo + 'yum install -y ' + packages);
         break;
-      case 'Debian 8':
-      case 'Debian 9':
-      case 'Debian 10':
+      case 'Debian 8/9':
+      case 'Debian 10+':
       case 'Ubuntu 14':
       case 'Ubuntu 16':
       case 'Ubuntu 18':
       case 'Ubuntu 20':
+      case 'Ubuntu 22':
         if (linux_distro.includes('Debian') && !use_root) {
           commands.push('su -');
         }
@@ -362,7 +554,7 @@ function onOptionsChanged() {
         }
         if (use_clang) {
           packages += ' clang' + getClangVersionSuffix() + ' libc++-dev';
-          if (linux_distro === 'Debian 10' || linux_distro === 'Ubuntu 18' || linux_distro === 'Ubuntu 20') {
+          if (linux_distro === 'Debian 10+' || linux_distro === 'Ubuntu 18' || linux_distro === 'Ubuntu 20' || linux_distro === 'Ubuntu 22') {
             packages += ' libc++abi-dev';
           }
         } else {
@@ -394,8 +586,8 @@ function onOptionsChanged() {
     if (!use_root) {
       commands.push('su -');
     }
-    commands.push('export PKG_PATH=ftp://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/i386/8.0_2019Q2/All');
-    var packages = 'git gperf cmake openssl gcc5-libs';
+    commands.push('export PKG_PATH=http://cdn.netbsd.org/pub/pkgsrc/packages/NetBSD/$(uname -p)/$(uname -r)/All');
+    var packages = 'git gperf cmake openssl gcc12-libs mozilla-rootcerts-openssl';
     commands.push('pkg_add ' + packages);
     if (!use_root) {
       commands.push('exit');
@@ -410,9 +602,9 @@ function onOptionsChanged() {
     commands.push('cd vcpkg');
     commands.push(local + 'bootstrap-vcpkg.bat');
     if (build_64bit) {
-      commands.push(local + 'vcpkg.exe install openssl:x64-windows zlib:x64-windows');
+      commands.push(local + 'vcpkg.exe install gperf:x64-windows openssl:x64-windows zlib:x64-windows');
     } else {
-      commands.push(local + 'vcpkg.exe install openssl:x86-windows zlib:x86-windows');
+      commands.push(local + 'vcpkg.exe install gperf:x86-windows openssl:x86-windows zlib:x86-windows');
     }
     commands.push('cd ..');
   }
@@ -438,7 +630,7 @@ function onOptionsChanged() {
 
   cmake_init_options = getBacicCmakeInitOptions();
   if (os_mac) {
-    cmake_init_options.push('-DOPENSSL_ROOT_DIR=/usr/local/opt/openssl/');
+    cmake_init_options.push('-DOPENSSL_ROOT_DIR=' + homebrew_install_dir + '/opt/openssl/');
   }
   cmake_init_options.push('-DCMAKE_INSTALL_PREFIX:PATH=' + install_dir);
   if (use_vcpkg) {
@@ -488,6 +680,26 @@ function onOptionsChanged() {
   }
   commands.push((use_powershell ? 'dir ' : 'ls -l ') + install_dir + '/bin/tdlight-telegram-bot-api*');
   document.getElementById('buildCommands').innerHTML = '<ul><li>' + commands.join('</li><li>') + '</li></ul>';
+  document.getElementById('copyBuildCommandsButton').style.display = commands.includes('exit') ? 'none' : 'block';
+}
+
+function copyBuildInstructions() {
+  var text = document.getElementById('buildCommands').innerText;
+
+  function resetButtonState (state) {
+    document.getElementById('copyBuildCommandsButton').classList.remove(state);
+    document.getElementById('copyBuildCommandsText').innerText = "Copy";
+  }
+
+  navigator.clipboard.writeText(text).then(result => {
+    document.getElementById('copyBuildCommandsButton').classList.add('success');
+    document.getElementById('copyBuildCommandsText').innerText = "Copied!";
+    setTimeout(() => resetButtonState('success'), 5000);
+  }, error => {
+    document.getElementById('copyBuildCommandsButton').classList.add('fail');
+    document.getElementById('copyBuildCommandsText').innerText = "Couldn't copy :(";
+    setTimeout(() => resetButtonState('fail'), 5000);
+  })
 }
 
 </script>
