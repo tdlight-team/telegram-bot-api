@@ -2827,7 +2827,6 @@ void Client::JsonMessage::store(td::JsonValueScope *scope) const {
     case td_api::messageChatSetTheme::ID:
       break;
     case td_api::messageAnimatedEmoji::ID:
-      UNREACHABLE();
       break;
     case td_api::messagePassportDataSent::ID:
       break;
