@@ -1483,6 +1483,10 @@ paths:
                 query:
                   description: Query to search for.
                   type: string
+                only_in_channels:
+                  description: Search for messages only in channels
+                  default: false
+                  type: boolean
                 offset_date:
                   description: The date of the message starting from which the results should be fetched. Use 0 or any date in the future to get results from the last message.
                   type: integer
@@ -1517,6 +1521,10 @@ paths:
                 query:
                   description: Query to search for.
                   type: string
+                only_in_channels:
+                  description: Search for messages only in channels
+                  default: false
+                  type: boolean
                 offset_date:
                   description: The date of the message starting from which the results should be fetched. Use 0 or any date in the future to get results from the last message.
                   type: integer
@@ -1551,6 +1559,10 @@ paths:
                 query:
                   description: Query to search for.
                   type: string
+                only_in_channels:
+                  description: Search for messages only in channels
+                  default: false
+                  type: boolean
                 offset_date:
                   description: The date of the message starting from which the results should be fetched. Use 0 or any date in the future to get results from the last message.
                   type: integer
