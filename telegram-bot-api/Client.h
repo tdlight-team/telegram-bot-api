@@ -178,6 +178,7 @@ class Client final : public WebhookActor::Callback {
   class JsonMessageReactionCountUpdated;
   class JsonAddress;
   class JsonOrderInfo;
+  class JsonStory;
   class JsonSuccessfulPaymentBot;
   class JsonEncryptedPassportElement;
   class JsonEncryptedCredentials;
@@ -195,6 +196,7 @@ class Client final : public WebhookActor::Callback {
   class JsonGiveaway;
   class JsonGiveawayWinners;
   class JsonGiveawayCompleted;
+  class JsonChatBoostAdded;
   class JsonUpdateTypes;
   class JsonWebhookInfo;
   class JsonStickerSet;
@@ -238,6 +240,7 @@ class Client final : public WebhookActor::Callback {
   class TdOnGetMyShortDescriptionCallback;
   class TdOnGetChatFullInfoCallback;
   class TdOnGetChatStickerSetCallback;
+  class TdOnGetChatCustomEmojiStickerSetCallback;
   class TdOnGetChatPinnedMessageCallback;
   class TdOnGetChatPinnedMessageToUnpinCallback;
   class TdOnGetGroupMembersCallback;
@@ -918,8 +921,10 @@ class Client final : public WebhookActor::Callback {
     td::string description;
     td::string invite_link;
     int64 sticker_set_id = 0;
+    int64 custom_emoji_sticker_set_id = 0;
     int32 date = 0;
     int32 slow_mode_delay = 0;
+    int32 unrestrict_boost_count = 0;
     int64 linked_chat_id = 0;
     object_ptr<td_api::chatLocation> location;
     object_ptr<td_api::ChatMemberStatus> status;
@@ -981,9 +986,11 @@ class Client final : public WebhookActor::Callback {
     int32 date = 0;
     int32 edit_date = 0;
     int32 initial_send_date = 0;
+    int32 sender_boost_count = 0;
     object_ptr<td_api::MessageOrigin> forward_origin;
     td::string author_signature;
     object_ptr<td_api::messageReplyToMessage> reply_to_message;
+    object_ptr<td_api::messageReplyToStory> reply_to_story;
     int64 media_album_id = 0;
     int64 via_bot_user_id = 0;
     object_ptr<td_api::MessageContent> content;

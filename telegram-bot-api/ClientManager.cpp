@@ -100,6 +100,11 @@ void ClientManager::send(PromisedQueryPtr query) {
 
   auto id_it = token_to_id_.find(token);
   if (id_it == token_to_id_.end()) {
+    auto method = query->method();
+    if (method == "close") {
+      return fail_query(400, "Bad Request: the bot has already been closed", std::move(query));
+    }
+
     if (!check_flood_limits(query)) {
       return;
     }
@@ -116,7 +121,6 @@ void ClientManager::send(PromisedQueryPtr query) {
                                                     query->token().str(),  query->is_user(), query->is_test_dc(),
                                                     tqueue_id, parameters_, client_info->stat_.actor_id(&client_info->stat_));
 
-    auto method = query->method();
     if (method != "deletewebhook" && method != "setwebhook") {
       auto webhook_info = parameters_->shared_data_->webhook_db_->get(bot_token_with_dc);
       if (!webhook_info.empty()) {

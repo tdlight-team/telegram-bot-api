@@ -264,6 +264,10 @@ paths:
                 last_name:
                   description: The last name of the user; 0-64 characters.
                   type: string
+                disable_notification:
+                  description: Disables "user joined Telegram" notification for other users that have the contact in their contact list.
+                  default: false
+                  type: boolean
               required:
                 - first_name
           multipart/form-data:
@@ -276,6 +280,10 @@ paths:
                 last_name:
                   description: The last name of the user; 0-64 characters.
                   type: string
+                disable_notification:
+                  description: Disables "user joined Telegram" notification for other users that have the contact in their contact list.
+                  default: false
+                  type: boolean
               required:
                 - first_name
           application/json:
@@ -288,6 +296,10 @@ paths:
                 last_name:
                   description: The last name of the user; 0-64 characters.
                   type: string
+                disable_notification:
+                  description: Disables "user joined Telegram" notification for other users that have the contact in their contact list.
+                  default: false
+                  type: boolean
               required:
                 - first_name
         required: true
