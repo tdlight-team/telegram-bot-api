@@ -1,5 +1,5 @@
 //
-// Copyright Aliaksei Levin (levlam@telegram.org), Arseny Smirnov (arseny30@gmail.com) 2014-2023
+// Copyright Aliaksei Levin (levlam@telegram.org), Arseny Smirnov (arseny30@gmail.com) 2014-2024
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -165,7 +165,7 @@ int main(int argc, char *argv[]) {
   auto start_time = td::Time::now();
   auto shared_data = std::make_shared<SharedData>();
   auto parameters = std::make_unique<ClientParameters>();
-  parameters->version_ = "7.3";
+  parameters->version_ = "7.7";
   parameters->shared_data_ = shared_data;
   parameters->start_time_ = start_time;
   auto net_query_stats = td::create_net_query_stats();
