@@ -60,7 +60,7 @@ jobs:
           cat $GITHUB_ENV > github.env
 
       - name: Upload environment info as artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: github_env
           path: github.env
@@ -130,7 +130,7 @@ jobs:
           docker save tdlightbotapi:${{ env.HASH_VERSION }}-${{ env.SAFE_ARCH }} -o ${{ env.SAFE_ARCH }}.tar
 
       - name: Upload image as artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: image_${{ env.SAFE_ARCH }}
           path: ${{ env.SAFE_ARCH }}.tar
@@ -145,7 +145,7 @@ jobs:
 
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
 
       - name: Load environment info and built images
         run: |
