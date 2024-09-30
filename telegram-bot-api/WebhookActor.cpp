@@ -1,5 +1,5 @@
 //
-// Copyright Aliaksei Levin (levlam@telegram.org), Arseny Smirnov (arseny30@gmail.com) 2014-2023
+// Copyright Aliaksei Levin (levlam@telegram.org), Arseny Smirnov (arseny30@gmail.com) 2014-2024
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -590,8 +590,7 @@ void WebhookActor::send_updates() {
 
 void WebhookActor::handle(td::unique_ptr<td::HttpQuery> response) {
   SCOPE_EXIT {
-    bool dummy = false;
-    td::Scheduler::instance()->destroy_on_scheduler(SharedData::get_file_gc_scheduler_id(), response, dummy);
+    td::Scheduler::instance()->destroy_on_scheduler_unique_ptr(SharedData::get_file_gc_scheduler_id(), response);
   };
 
   auto connection_id = get_link_token();
