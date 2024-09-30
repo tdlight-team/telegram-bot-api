@@ -264,6 +264,10 @@ paths:
                 last_name:
                   description: The last name of the user; 0-64 characters.
                   type: string
+                disable_notification:
+                  description: Disables "user joined Telegram" notification for other users that have the contact in their contact list.
+                  default: false
+                  type: boolean
               required:
                 - first_name
           multipart/form-data:
@@ -276,6 +280,10 @@ paths:
                 last_name:
                   description: The last name of the user; 0-64 characters.
                   type: string
+                disable_notification:
+                  description: Disables "user joined Telegram" notification for other users that have the contact in their contact list.
+                  default: false
+                  type: boolean
               required:
                 - first_name
           application/json:
@@ -288,6 +296,10 @@ paths:
                 last_name:
                   description: The last name of the user; 0-64 characters.
                   type: string
+                disable_notification:
+                  description: Disables "user joined Telegram" notification for other users that have the contact in their contact list.
+                  default: false
+                  type: boolean
               required:
                 - first_name
         required: true
@@ -1471,6 +1483,10 @@ paths:
                 query:
                   description: Query to search for.
                   type: string
+                only_in_channels:
+                  description: Search for messages only in channels
+                  default: false
+                  type: boolean
                 offset_date:
                   description: The date of the message starting from which the results should be fetched. Use 0 or any date in the future to get results from the last message.
                   type: integer
@@ -1505,6 +1521,10 @@ paths:
                 query:
                   description: Query to search for.
                   type: string
+                only_in_channels:
+                  description: Search for messages only in channels
+                  default: false
+                  type: boolean
                 offset_date:
                   description: The date of the message starting from which the results should be fetched. Use 0 or any date in the future to get results from the last message.
                   type: integer
@@ -1539,6 +1559,10 @@ paths:
                 query:
                   description: Query to search for.
                   type: string
+                only_in_channels:
+                  description: Search for messages only in channels
+                  default: false
+                  type: boolean
                 offset_date:
                   description: The date of the message starting from which the results should be fetched. Use 0 or any date in the future to get results from the last message.
                   type: integer

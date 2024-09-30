@@ -201,13 +201,16 @@
       <option>Alpine</option>
       <option>CentOS 7</option>
       <option>CentOS 8</option>
+      <option>CentOS Stream 9</option>
       <option>Debian 8/9</option>
       <option>Debian 10+</option>
+      <option>Fedora 21+</option>
       <option>Ubuntu 14</option>
       <option>Ubuntu 16</option>
       <option>Ubuntu 18</option>
       <option>Ubuntu 20</option>
       <option>Ubuntu 22</option>
+      <option>Ubuntu 24</option>
       <option>Other</option>
     </select>
     <p></p>
@@ -260,7 +263,7 @@
     </div>
 
     <div id="buildRootDiv" class="hide">
-      <label><input type="checkbox" id="buildRootCheckbox" onchange="onOptionsChanged()"/>Build from root user (unrecommended).</label>
+      <label><input type="checkbox" id="buildRootCheckbox" onchange="onOptionsChanged()"/>Build from root user (not recommended).</label>
     </div>
 
     <p></p>
@@ -353,7 +356,7 @@ function onOptionsChanged() {
   document.getElementById('buildCommandsDiv').style.display = 'block';
 
   var use_clang = os_freebsd || os_openbsd;
-  if (os_linux && linux_distro !== 'Alpine' && !linux_distro.includes('CentOS')) {
+  if (os_linux && linux_distro !== 'Alpine' && !linux_distro.includes('CentOS') && !linux_distro.includes('Fedora')) {
     document.getElementById('buildCompilerDiv').style.display = 'block';
     use_clang = document.getElementById('buildCompilerRadioClang').checked;
   } else {
@@ -446,7 +449,7 @@ function onOptionsChanged() {
     pre_text.push('Install Git, ' + compiler + ', make, CMake >= 3.0.2, OpenSSL-dev, zlib-dev, gperf using your package manager.');
   }
   if (os_freebsd) {
-    pre_text.push('Note that the following instruction is for FreeBSD 11.');
+    pre_text.push('Note that the following instruction is for FreeBSD 13.');
     pre_text.push('Note that the following calls to <code>pkg</code> needs to be run as <code>root</code>.');
   }
   if (os_openbsd) {
@@ -496,6 +499,19 @@ function onOptionsChanged() {
         return '-10';
       case 'Ubuntu 22':
         return '-14';
+      case 'Ubuntu 24':
+        return '-18';
+      default:
+        return ''; // use default version
+    }
+  }
+
+  function getLibcplusplusVersionSuffix() {
+    switch (linux_distro) {
+      case 'Ubuntu 20':
+      case 'Ubuntu 22':
+      case 'Ubuntu 24':
+        return getClangVersionSuffix();
       default:
         return ''; // use default version
     }
@@ -514,22 +530,31 @@ function onOptionsChanged() {
         commands.push(sudo + 'apk update');
         commands.push(sudo + 'apk upgrade');
         var packages = 'alpine-sdk linux-headers git zlib-dev openssl-dev gperf cmake';
-        commands.push(sudo + 'apk add --update ' + packages);
+        commands.push(sudo + 'apk add ' + packages);
         break;
       case 'CentOS 7':
-      case 'CentOS 8':
         commands.push(sudo + 'yum update -y');
-        var packages = 'gcc-c++ make git zlib-devel openssl-devel';
-        if (linux_distro === 'CentOS 7') {
-          commands.push(sudo + 'yum install -y centos-release-scl-rh epel-release');
-          commands.push(sudo + 'yum install -y devtoolset-9-gcc devtoolset-9-gcc-c++');
-          cmake = 'cmake3';
-          packages += ' gperf';
-        } else {
-          commands.push(sudo + 'dnf --enablerepo=powertools install gperf');
-        }
-        packages += ' ' + cmake;
+        commands.push(sudo + 'yum install -y centos-release-scl-rh epel-release');
+        commands.push(sudo + 'yum install -y devtoolset-9-gcc devtoolset-9-gcc-c++');
+        cmake = 'cmake3';
+        var packages = 'gcc-c++ make git zlib-devel openssl-devel gperf ' + cmake;
         commands.push(sudo + 'yum install -y ' + packages);
+        break;
+      case 'CentOS 8':
+      case 'CentOS Stream 9':
+        commands.push(sudo + 'dnf update -y');
+        if (linux_distro === 'CentOS 8') {
+          commands.push(sudo + 'dnf --enablerepo=powertools install gperf');
+        } else {
+          commands.push(sudo + 'dnf --enablerepo=crb install gperf');
+        }
+        var packages = 'gcc-c++ make git zlib-devel openssl-devel cmake';
+        commands.push(sudo + 'dnf install -y ' + packages);
+        break;
+      case 'Fedora 21+':
+        commands.push(sudo + 'dnf update -y');
+        var packages = 'gperf gcc-c++ make git zlib-devel openssl-devel cmake';
+        commands.push(sudo + 'dnf install -y ' + packages);
         break;
       case 'Debian 8/9':
       case 'Debian 10+':
@@ -538,6 +563,7 @@ function onOptionsChanged() {
       case 'Ubuntu 18':
       case 'Ubuntu 20':
       case 'Ubuntu 22':
+      case 'Ubuntu 24':
         if (linux_distro.includes('Debian') && !use_root) {
           commands.push('su -');
         }
@@ -553,9 +579,9 @@ function onOptionsChanged() {
           packages += ' cmake';
         }
         if (use_clang) {
-          packages += ' clang' + getClangVersionSuffix() + ' libc++-dev';
-          if (linux_distro === 'Debian 10+' || linux_distro === 'Ubuntu 18' || linux_distro === 'Ubuntu 20' || linux_distro === 'Ubuntu 22') {
-            packages += ' libc++abi-dev';
+          packages += ' clang' + getClangVersionSuffix() + ' libc++' + getLibcplusplusVersionSuffix() + '-dev';
+          if (linux_distro === 'Debian 10+' || linux_distro === 'Ubuntu 18' || linux_distro === 'Ubuntu 20' || linux_distro === 'Ubuntu 22' || linux_distro === 'Ubuntu 24') {
+            packages += ' libc++abi' + getLibcplusplusVersionSuffix() + '-dev';
           }
         } else {
           packages += ' g++';
@@ -587,7 +613,7 @@ function onOptionsChanged() {
       commands.push('su -');
     }
     commands.push('export PKG_PATH=http://cdn.netbsd.org/pub/pkgsrc/packages/NetBSD/$(uname -p)/$(uname -r)/All');
-    var packages = 'git gperf cmake openssl gcc12-libs mozilla-rootcerts-openssl';
+    var packages = 'git gperf pcre2 cmake openssl gcc12-libs mozilla-rootcerts-openssl';
     commands.push('pkg_add ' + packages);
     if (!use_root) {
       commands.push('exit');
