@@ -19,6 +19,11 @@ CUSTOM_ARGS=""
 if [ -n "$TELEGRAM_STAT" ]; then
   CUSTOM_ARGS="${CUSTOM_ARGS} --http-stat-port=8082"
 fi
+
+if [ -n "$TELEGRAM_STAT_HOST" ]; then
+  CUSTOM_ARGS="${CUSTOM_ARGS} --http-stat-ip-address=$TELEGRAM_STAT_HOST"
+fi
+
 if [ -n "$TELEGRAM_STAT_HIDE_SENSIBLE_DATA" ]; then
   CUSTOM_ARGS="${CUSTOM_ARGS} --stats-hide-sensible-data"
 fi
