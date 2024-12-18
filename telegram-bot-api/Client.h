@@ -232,7 +232,6 @@ class Client final : public WebhookActor::Callback {
   class JsonAuthorizationState;
   class JsonCallbackQueryAnswer;
   class JsonChats;
-  class JsonChatsNearby;
   class JsonMessagesArray;
   class JsonFoundMessages;
   class JsonProxy;
@@ -296,7 +295,6 @@ class Client final : public WebhookActor::Callback {
   class TdOnPingCallback;
   class TdOnGetMemoryStatisticsCallback;
   class TdOnGetChatsCallback;
-  class TdOnGetChatsNearbyCallback;
   class TdOnJoinChatCallback;
   class TdOnReturnChatCallback;
   class TdOnReturnMessagesCallback;
@@ -848,7 +846,6 @@ class Client final : public WebhookActor::Callback {
   td::Status process_get_chats_query(PromisedQueryPtr &query);
   td::Status process_get_common_chats_query(PromisedQueryPtr &query);
   td::Status process_get_inactive_chats_query(PromisedQueryPtr &query);
-  td::Status process_get_nearby_chats_query(PromisedQueryPtr &query);
   td::Status process_search_public_chats_query(PromisedQueryPtr &query);
   td::Status process_set_poll_answer_query(PromisedQueryPtr &query);
   td::Status process_join_chat_query(PromisedQueryPtr &query);
