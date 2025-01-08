@@ -1399,10 +1399,10 @@ paths:
                 query:
                   description: Query to search for.
                   type: string
-                only_in_channels:
-                  description: Search for messages only in channels
-                  default: false
-                  type: boolean
+                chat_filter:
+                  description: |-
+                    Filter for chat type in search result. Must be one of `private`, `group` or `channel`
+                  type: string
                 offset_date:
                   description: The date of the message starting from which the results should be fetched. Use 0 or any date in the future to get results from the last message.
                   type: integer
