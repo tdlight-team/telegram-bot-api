@@ -11008,6 +11008,24 @@ td::Result<td_api::object_ptr<td_api::SearchMessagesFilter>> Client::get_search_
   return std::move(result);
 }
 
+td::Result<td_api::object_ptr<td_api::SearchMessagesChatTypeFilter>> Client::get_search_messages_chat_type_filter(const Query *query,
+                                                                                                td::Slice field_name) {
+  auto filter = query->arg(field_name);
+  object_ptr<td_api::SearchMessagesChatTypeFilter> result;
+  if (filter.empty()) {
+    result = nullptr;
+  } else if (filter == "private") {
+    result = make_object<td_api::searchMessagesChatTypeFilterPrivate>();
+  } else if (filter == "group") {
+    result = make_object<td_api::searchMessagesChatTypeFilterGroup>();
+  } else if (filter == "channel") {
+    result = make_object<td_api::searchMessagesChatTypeFilterChannel>();
+  } else {
+    return td::Status::Error(400, "Filter not valid");
+  }
+  return std::move(result);
+}
+
 // end custom helper methods impl
 
 void Client::on_message_send_succeeded(object_ptr<td_api::message> &&message, int64 old_message_id) {
@@ -13920,9 +13938,9 @@ td::Status Client::process_search_messages_query(PromisedQueryPtr &query) {
   TRY_RESULT(filter, get_search_messages_filter(query.get()));
   auto min_date = get_integer_arg(query.get(), "min_date", 0);
   auto max_date = get_integer_arg(query.get(), "max_date", 0);
-  bool only_chan = to_bool(query->arg("only_in_channels"));
+  TRY_RESULT(chat_filter, get_search_messages_chat_type_filter(query.get()));
 
-  send_request(make_object<td_api::searchMessages>(nullptr, only_chan, query_.str(), offset.str(), 100, std::move(filter), min_date, max_date),
+  send_request(make_object<td_api::searchMessages>(nullptr, query_.str(), offset.str(), 100, std::move(filter), std::move(chat_filter), min_date, max_date),
                td::make_unique<TdOnReturnMessagesCallback>(this, std::move(query)));
   return td::Status::OK();
 }
@@ -14668,8 +14686,8 @@ void Client::add_user(UserInfo *user_info, object_ptr<td_api::user> &&user) {
   user_info->language_code = std::move(user->language_code_);
 
   // start custom properties
-  user_info->is_verified = user->is_verified_;
-  user_info->is_scam = user->is_scam_;
+  user_info->is_verified = user->verification_status_->is_verified_;
+  user_info->is_scam = user->verification_status_->is_scam_;
   user_info->status = std::move(user->status_);
   //end custom properties
 
@@ -14759,8 +14777,8 @@ void Client::add_supergroup(SupergroupInfo *supergroup_info, object_ptr<td_api::
   supergroup_info->join_by_request = supergroup->join_by_request_;
 
   // start custom properties
-  supergroup_info->is_verified = supergroup->is_verified_;
-  supergroup_info->is_scam = supergroup->is_scam_;
+  supergroup_info->is_verified = supergroup->verification_status_->is_verified_;
+  supergroup_info->is_scam = supergroup->verification_status_->is_scam_;
   // end custom properties
 }
 

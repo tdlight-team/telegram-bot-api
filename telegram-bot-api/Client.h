@@ -686,6 +686,9 @@ class Client final : public WebhookActor::Callback {
   static td::Result<td_api::object_ptr<td_api::SearchMessagesFilter>> get_search_messages_filter(
       const Query *query, td::Slice field_name = td::Slice("filter"));
 
+  static td::Result<td_api::object_ptr<td_api::SearchMessagesChatTypeFilter>> get_search_messages_chat_type_filter(
+      const Query *query, td::Slice field_name = td::Slice("chat_filter"));
+
   // end custom helper methods
 
   void on_message_send_succeeded(object_ptr<td_api::message> &&message, int64 old_message_id);
