@@ -13916,7 +13916,8 @@ td::Status Client::process_create_chat_query(PromisedQueryPtr &query) {
   auto description = query->arg("description");
   auto message_auto_delete_time = get_integer_arg(query.get(), "message_auto_delete_time", 0);
   if (chat_type == "supergroup") {
-    send_request(make_object<td_api::createNewSupergroupChat>(title.str(), false, false, description.str(), nullptr, message_auto_delete_time, false),
+    auto is_forum = to_bool(query->arg("is_forum"));
+    send_request(make_object<td_api::createNewSupergroupChat>(title.str(), is_forum, false, description.str(), nullptr, message_auto_delete_time, false),
                  td::make_unique<TdOnReturnChatCallback>(this, std::move(query)));
   } else if (chat_type == "channel") {
     send_request(make_object<td_api::createNewSupergroupChat>(title.str(), false, true, description.str(), nullptr, message_auto_delete_time, false),
