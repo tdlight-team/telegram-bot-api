@@ -9213,6 +9213,9 @@ components:
         is_scam:
           description: '*Optional*. Is the user reported for scam, clients show a warning to the user.'
           type: boolean
+        is_fake:
+          description: '*Optional*. Is the user marked as fake by Telegram.'
+          type: boolean
       required:
         - id
         - is_bot
@@ -9280,6 +9283,9 @@ components:
           type: boolean
         is_scam:
           description: '*Optional*. Is the chat reported for scam, clients show a warning to the user.'
+          type: boolean
+        is_fake:
+          description: '*Optional*. Is the chat marked as fake by Telegram.'
           type: boolean
         distance:
           description: '*Optional*. Distance to the chat location in meters. Returned only in `getChatsNearby`.'
