@@ -491,6 +491,9 @@ class Client::JsonUser final : public td::Jsonable {
     if (user_info != nullptr && user_info->is_scam) {
       object("is_scam", td::JsonBool(user_info->is_scam));
     }
+    if (user_info != nullptr && user_info->is_fake) {
+      object("is_fake", td::JsonBool(user_info->is_fake));
+    }
     if (user_info != nullptr) {
         json_store_user_status(object, user_info->status.get());
     }
@@ -1053,6 +1056,9 @@ class Client::JsonChat final : public td::Jsonable {
         if (user_info->is_scam) {
           object("is_scam", td::JsonBool(user_info->is_scam));
         }
+        if (user_info->is_fake) {
+          object("is_fake", td::JsonBool(user_info->is_fake));
+        }
 
         json_store_user_status(object, user_info->status.get());
         // end custom properties impl
@@ -1144,6 +1150,9 @@ class Client::JsonChat final : public td::Jsonable {
         }
         if (supergroup_info->is_scam) {
           object("is_scam", td::JsonBool(supergroup_info->is_scam));
+        }
+        if (supergroup_info->is_fake) {
+          object("is_fake", td::JsonBool(supergroup_info->is_fake));
         }
         // end custom properties impl
 
@@ -14686,8 +14695,15 @@ void Client::add_user(UserInfo *user_info, object_ptr<td_api::user> &&user) {
   user_info->language_code = std::move(user->language_code_);
 
   // start custom properties
-  user_info->is_verified = user->verification_status_->is_verified_;
-  user_info->is_scam = user->verification_status_->is_scam_;
+  if (user->verification_status_ == nullptr) {
+    user_info->is_verified = false;
+    user_info->is_scam = false;
+    user_info->is_fake = false;
+  } else {
+    user_info->is_verified = user->verification_status_->is_verified_;
+    user_info->is_scam = user->verification_status_->is_scam_;
+    user_info->is_fake = user->verification_status_->is_fake_;
+  }
   user_info->status = std::move(user->status_);
   //end custom properties
 
@@ -14777,8 +14793,15 @@ void Client::add_supergroup(SupergroupInfo *supergroup_info, object_ptr<td_api::
   supergroup_info->join_by_request = supergroup->join_by_request_;
 
   // start custom properties
-  supergroup_info->is_verified = supergroup->verification_status_->is_verified_;
-  supergroup_info->is_scam = supergroup->verification_status_->is_scam_;
+  if (supergroup->verification_status_ == nullptr) {
+    supergroup_info->is_verified = false;
+    supergroup_info->is_scam = false;
+    supergroup_info->is_fake = false;
+  } else {
+    supergroup_info->is_verified = supergroup->verification_status_->is_verified_;
+    supergroup_info->is_scam = supergroup->verification_status_->is_scam_;
+    supergroup_info->is_fake = supergroup->verification_status_->is_fake_;
+  }
   // end custom properties
 }
 

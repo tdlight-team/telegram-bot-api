@@ -968,6 +968,7 @@ class Client final : public WebhookActor::Callback {
     // start custom properties
     bool is_verified = false;
     bool is_scam = false;
+    bool is_fake = false;
     object_ptr<td_api::UserStatus> status;
     // end custom properties
 
@@ -1030,6 +1031,7 @@ class Client final : public WebhookActor::Callback {
     // start custom properties
     bool is_verified = false;
     bool is_scam = false;
+    bool is_fake = false;
     // end custom properties
   };
   static void add_supergroup(SupergroupInfo *supergroup_info, object_ptr<td_api::supergroup> &&supergroup);
