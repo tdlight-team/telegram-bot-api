@@ -1061,6 +1061,10 @@ class Client::JsonChat final : public td::Jsonable {
         }
 
         json_store_user_status(object, user_info->status.get());
+
+        if (user_info->is_premium) {
+          object("is_premium", td::JsonTrue());
+        }
         // end custom properties impl
 
         if (is_full_) {
